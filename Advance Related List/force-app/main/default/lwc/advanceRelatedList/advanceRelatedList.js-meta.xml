@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>58.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__RecordPage</target>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__RecordPage,lightning__AppPage,lightning__HomePage">
+            <property 
+                name="childObjectApiName" 
+                type="String" 
+                label="Child Object API Name" 
+                required="true" 
+                description="API name of the child object (e.g., Hospital_Affiliation__c)" 
+            />
+            <property 
+                name="parentLookupField" 
+                type="String" 
+                label="Parent Lookup Field API Name" 
+                required="true" 
+                description="API name of the lookup field in child object (e.g., Provider__c)" 
+            />
+            <property 
+                name="fieldsToDisplay" 
+                type="String" 
+                label="Fields to Display" 
+                required="true" 
+                description="Comma-separated list of field API names (e.g., Name,Status__c,Start_Date__c)" 
+            />
+            <property 
+                name="columnLabels" 
+                type="String" 
+                label="Column Labels" 
+                required="false" 
+                description="Optional: Comma-separated list of custom column labels matching fields order" 
+            />
+            <property 
+                name="searchableFields" 
+                type="String" 
+                label="Searchable Fields" 
+                required="true" 
+                description="Comma-separated list of field API names to enable search" 
+            />
+            <property 
+                name="sortableFields" 
+                type="String" 
+                label="Sortable Fields" 
+                required="false" 
+                description="Comma-separated list of fields that should be sortable" 
+            />
+            <property 
+
+                name="recordsPerPage" 
+                type="Integer" 
+                label="Records Per Page" 
+                default="10" 
+                min="1" 
+                max="100" 
+                description="Number of records to display per page (1-100)" 
+            />
+            <property 
+                name="flowName" 
+                type="String" 
+                label="Flow API Name" 
+                required="false" 
+                description="API name of the flow to launch (optional)" 
+            />
+            <property 
+                name="flowTitle" 
+                type="String" 
+                label="Flow Modal Title" 
+                default="Run Flow" 
+                required="false" 
+                description="Title to display on the flow modal" 
+            />
+            <property 
+                name="listTitle" 
+                type="String" 
+                label="List Title" 
+                required="false" 
+                description="Custom title for the related list. If blank, uses '[Object] Related List'" 
+            />
+            <property 
+                name="customIconName" 
+                type="String" 
+                label="Custom Icon Name" 
+                required="false" 
+                description="SLDS icon name (e.g., standard:account)" 
+            />
+            <property 
+                name="iconBackgroundColor" 
+                type="String" 
+                label="Icon Background Color" 
+                default="#f4b400" 
+                required="false" 
+                description="Background color for the icon (e.g., #f4b400)" 
+            />
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>

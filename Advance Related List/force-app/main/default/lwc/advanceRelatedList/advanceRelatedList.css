@@ -1,0 +1,88 @@
+.icon-wrapper {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.standard-icon-bg {
+    background-color: #f4b400;
+}
+
+.custom-icon-bg {
+    background-color: #0b74de;
+}
+
+.default-icon-bg {
+    background-color: #e0e0e0;
+}
+
+.icon-wrapper img {
+    width: 20px;
+    height: 20px;
+}
+
+.search-input {
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.table-container {
+    position: relative;
+    width: 100%;
+    min-height: 200px;
+}
+
+/* For 5 or fewer columns - stretch to fill screen */
+.table-container.light-columns {
+    width: 100%;
+    overflow-x: hidden;
+}
+
+.table-container.light-columns lightning-datatable {
+    width: 100% !important;
+}
+
+/* For more than 5 columns - enable horizontal scroll */
+.table-container.heavy-columns {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.table-container.heavy-columns lightning-datatable {
+    min-width: max-content;
+}
+
+/* Scrollbar styling */
+.table-container::-webkit-scrollbar {
+    height: 8px;
+}
+
+.table-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.slds-modal__close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 100;
+}
+
+/* Ensure modal header has relative positioning for close button */
+.slds-modal__header {
+    position: relative;
+}

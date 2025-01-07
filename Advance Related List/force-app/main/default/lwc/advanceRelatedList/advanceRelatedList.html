@@ -21,6 +21,7 @@
                         </div>
                     </div>
                 </div>
+                
 
                 <!-- Search and Actions Section -->
                 <div class="slds-col slds-grid slds-grid_align-end">
@@ -35,6 +36,13 @@
                                 class="search-input">
                             </lightning-input>
                         </div>
+
+                <!-- Show search results count if searching -->
+                <template if:true={debouncedSearchTerm}>
+                    <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
+                        Showing {wiredRecordResult.data.totalRecords} results for "{debouncedSearchTerm}"
+                    </div>
+                </template>
                         
                         <!-- Action Buttons -->
                         <div class="slds-button-group">
@@ -211,14 +219,14 @@
                     onrowselection={handleRowSelection}
                     onrowaction={handleRowAction}
                     hide-checkbox-column="true"
-                    resize-column-disabled>
+                    resize-column-disabled
+                    suppress-bottom-bar
+                    enable-safe-html>
                 </lightning-datatable>
             </div>
         </div>
             
-            
-
-            <!-- Pagination -->
+            <!-- Updated Pagination -->
             <div class="slds-grid slds-grid_align-center slds-m-top_small">
                 <div class="slds-button-group">
                     <lightning-button
@@ -228,6 +236,9 @@
                     </lightning-button>
                     <div class="slds-p-horizontal_medium slds-grid slds-grid_vertical-align-center">
                         Page {pageNumber} of {totalPages}
+                        <template if:true={debouncedSearchTerm}>
+                            (Filtered)
+                        </template>
                     </div>
                     <lightning-button
                         label="Next"

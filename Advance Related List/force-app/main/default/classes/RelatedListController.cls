@@ -6,53 +6,73 @@ public with sharing class RelatedListController {
         String parentId,
         List<String> fields,
         Integer pageSize,
-        Integer pageNumber
+        Integer pageNumber,
+        String searchTerm,
+        List<String> searchableFields
     ) {
         try {
-            // Debug input parameters            System.debug('getRecords Input Parameters:');
-            System.debug('Child Object: ' + childObject);
-            System.debug('Parent Lookup Field: ' + parentLookupField);
-            System.debug('Parent ID: ' + parentId);
-            System.debug('Fields: ' + fields);
-            System.debug('Page Size: ' + pageSize);
-            System.debug('Page Number: ' + pageNumber);
-
-            
-            Integer offset = (pageNumber - 1) * pageSize;
-            
-            // Build the dynamic query
+            // Build the base query fields
             Set<String> queryFields = new Set<String>{'Id', 'Name'};
-            queryFields.addAll(fields);
             
-            // Build the query string
-            String queryStr = 'SELECT ' + String.join(new List<String>(queryFields), ',') +
-                           ' FROM ' + String.escapeSingleQuotes(childObject) +
-                           ' WHERE ' + String.escapeSingleQuotes(parentLookupField) + ' = \'' + String.escapeSingleQuotes(parentId) + '\'' +
-                           ' ORDER BY CreatedDate DESC' +
-                           ' LIMIT ' + pageSize + ' OFFSET ' + offset;
-            
+            // Add all fields including relationship fields
+            for(String field : fields) {
+                if(field.contains('__r.')) {
+                    // For relationship fields, we need to add the whole path
+                    queryFields.add(field);
+                } else {
+                    queryFields.add(field);
+                }
+            }
 
+            // Build the WHERE clause
+            String whereClause = String.escapeSingleQuotes(parentLookupField) + 
+                               ' = \'' + String.escapeSingleQuotes(parentId) + '\'';
+
+            // Add search conditions if searchTerm is provided
+            if (String.isNotBlank(searchTerm)) {
+                List<String> searchConditions = new List<String>();
+                String searchValue = '%' + String.escapeSingleQuotes(searchTerm) + '%';
+                
+                for (String field : searchableFields) {
+                    if (field.contains('__r.')) {
+                        searchConditions.add(field + ' LIKE :searchValue');
+                    } else {
+                        searchConditions.add(field + ' LIKE :searchValue');
+                    }
+                }
+                
+                if (!searchConditions.isEmpty()) {
+                    whereClause += ' AND (' + String.join(searchConditions, ' OR ') + ')';
+                }
+            }
+
+            // Debug the query fields
+            System.debug('Query Fields: ' + queryFields);
+            
+            // Build final queries
+            String baseQuery = 'FROM ' + String.escapeSingleQuotes(childObject) + 
+                             ' WHERE ' + whereClause;
+            
+            // Get total filtered count
+            Integer totalRecords = Database.countQuery('SELECT COUNT() ' + baseQuery);
+
+            // Get paginated records
+            String queryStr = 'SELECT ' + String.join(new List<String>(queryFields), ',') + 
+                            ' ' + baseQuery + 
+                            ' ORDER BY CreatedDate DESC' +
+                            ' LIMIT :pageSize OFFSET :offset';
+
+            // Debug the final query
+            System.debug('Final Query: ' + queryStr);
+
+            Integer offset = (pageNumber - 1) * pageSize;
             List<SObject> records = Database.query(queryStr);
-            System.debug('Executing Query: ' + queryStr);
-            
-            List<SObject> records = Database.query(queryStr);
-            System.debug('Query Results: ' + records);
 
-    
-            // Get total count
-            String countQuery = 'SELECT COUNT() FROM ' + String.escapeSingleQuotes(childObject) +
-                              ' WHERE ' + String.escapeSingleQuotes(parentLookupField) + ' = \'' + String.escapeSingleQuotes(parentId) + '\'';
-            
-            Integer totalRecords = Database.countQuery(countQuery);
-            System.debug('Total Records: ' + totalRecords);
-
-            
             return new RelatedListWrapper(records, totalRecords);
             
         } catch (Exception e) {
-
             System.debug('Error in getRecords: ' + e.getMessage());
-            System.debug('Stack trace: ' + e.getStackTraceString());
+            System.debug('Error stack trace: ' + e.getStackTraceString());
             throw new AuraHandledException('Error: ' + e.getMessage());
         }
     }
@@ -66,7 +86,7 @@ public with sharing class RelatedListController {
             String query = 'SELECT Id FROM ' + String.escapeSingleQuotes(objectName) +
                          ' WHERE Id = \'' + String.escapeSingleQuotes(recordId) + '\' LIMIT 1';
             SObject record = Database.query(query);
-            
+
             if (record != null) {
                 delete record;
             }
@@ -74,11 +94,11 @@ public with sharing class RelatedListController {
             throw new AuraHandledException('Error deleting record: ' + e.getMessage());
         }
     }
-    
+
     public class RelatedListWrapper {
         @AuraEnabled public List<SObject> records;
         @AuraEnabled public Integer totalRecords;
-        
+
         public RelatedListWrapper(List<SObject> records, Integer totalRecords) {
             this.records = records;
             this.totalRecords = totalRecords;

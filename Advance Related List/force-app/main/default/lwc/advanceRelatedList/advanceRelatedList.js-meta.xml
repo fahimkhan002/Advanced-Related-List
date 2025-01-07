@@ -52,7 +52,6 @@
                 description="Comma-separated list of fields that should be sortable" 
             />
             <property 
-
                 name="recordsPerPage" 
                 type="Integer" 
                 label="Records Per Page" 
@@ -98,6 +97,7 @@
                 required="false" 
                 description="Background color for the icon (e.g., #f4b400)" 
             />
+            
         </targetConfig>
     </targetConfigs>
 </LightningComponentBundle>

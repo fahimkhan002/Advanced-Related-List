@@ -58,6 +58,10 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     @track flowKey = Date.now(); // Add this at the top with other track properties
     // Add these track properties
     @track flowInputVariables = [];
+    @track originalData = [];
+    @track searchTerm = '';
+    @track debouncedSearchTerm = '';
+    searchTimeout;
 
     get hasIcon() {
         return this.customIconName || this.objectIconName;
@@ -96,10 +100,6 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     get hasFlowName() {
         return this.flowName && this.flowName.trim().length > 0;
     }
-   
-    // get hasFlowTitle() {
-    //     return this.flowTitle;
-    // }
 
     get editFormFields() {
         return this.editableFields?.map(field => field.fieldApiName) || [];
@@ -135,14 +135,14 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     initializeColumns() {
         const columnCount = this.fieldsArray.length;
         let columnWidth;
-
+    
         if (columnCount <= 5) {
             const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
             columnWidth = `calc((100% - ${totalFixedWidth}px) / ${columnCount})`;
         } else {
             columnWidth = 255;
         }
-
+    
         this.columns = [
             {
                 label: '#',
@@ -154,25 +154,59 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             ...this.fieldsArray.map((field, index) => {
                 const isNameField = field.toLowerCase() === 'name';
                 const isLookupField = field.includes('.');
-
+                const isEmailField = field.toLowerCase().includes('email');
+                const isPhoneField = field.toLowerCase().includes('phone');
+                const isDateField = this.objectInfo?.fields[field]?.dataType === 'datetime' || 
+                                  this.objectInfo?.fields[field]?.dataType === 'date';
+    
                 let fieldConfig = {
                     label: this.getColumnLabel(field, index),
-                    fieldName: isNameField ? 'nameUrl' : isLookupField ? `${field}_url` : field,
+                    fieldName: field,
                     sortable: true,
                     wrapText: false,
                     initialWidth: columnWidth
                 };
-
-                if (isNameField || isLookupField) {
+    
+                if (isNameField) {
                     fieldConfig.type = 'url';
+                    fieldConfig.fieldName = 'nameUrl';
                     fieldConfig.typeAttributes = {
-                        label: { 
-                            fieldName: isLookupField ? field : 'Name'
-                        },
+                        label: { fieldName: 'Name' },
                         target: '_self'
                     };
+                } else if (isLookupField) {
+                    fieldConfig.type = 'url';
+                    fieldConfig.fieldName = `${field}_url`;
+                    fieldConfig.sortFieldName = field;  // Add this line
+                    fieldConfig.typeAttributes = {
+                        label: { fieldName: field },
+                        target: '_self'
+                    };
+                } else if (isEmailField) {
+                    fieldConfig.type = 'button';
+                    fieldConfig.typeAttributes = {
+                        variant: 'base',
+                        label: { fieldName: field },
+                        name: field,
+                        title: { fieldName: field },
+                        disabled: false
+                    };
+                } else if (isPhoneField) {
+                    fieldConfig.type = 'url';
+                    fieldConfig.fieldName = `${field}_url`;
+                    fieldConfig.typeAttributes = {
+                        label: { fieldName: `${field}_formatted` },
+                        target: '_self'
+                    };
+                } else if (isDateField) {
+                    fieldConfig.type = 'date';
+                    fieldConfig.typeAttributes = {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    };
                 }
-
+    
                 return fieldConfig;
             }),
             {
@@ -181,7 +215,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 fixedWidth: FIXED_WIDTH.action
             }
         ];
-
+    
         this.updateTableResponsiveness();
     }
     
@@ -224,20 +258,29 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     handleRowAction(event) {
         const action = event.detail.action;
         const row = event.detail.row;
-        this.selectedRecordId = row.Id;
-
-        switch (action.name) {
-            case 'view':
-                this.navigateToRecord();
-                break;
-            case 'edit':
-                this.showEditModal = true;
-                break;
-            case 'delete':
-                this.showDeleteModal = true;
-                break;
-            default:
-                break;
+    
+        // If it's a standard action (edit, delete, etc.)
+        if (action.name === 'edit' || action.name === 'delete' || action.name === 'view') {
+            this.selectedRecordId = row.Id;
+    
+            switch (action.name) {
+                case 'view':
+                    this.navigateToRecord();
+                    break;
+                case 'edit':
+                    this.showEditModal = true;
+                    break;
+                case 'delete':
+                    this.showDeleteModal = true;
+                    break;
+                default:
+                    break;
+            }
+        } 
+        // If it's an email field click
+        else if (row[action.name] && action.name.toLowerCase().includes('email')) {
+            // Open email client
+            window.location.href = `mailto:${row[action.name]}`;
         }
     }
 
@@ -333,61 +376,125 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
 
     handleSort(event) {
         const { fieldName: sortedBy, sortDirection } = event.detail;
+        console.log('Sort triggered:', { sortedBy, sortDirection });
         this.sortedBy = sortedBy;
         this.sortedDirection = sortDirection;
     
         let clonedData = [...this.filteredData];
         
-        // Store the original row numbers before sorting
-        const rowNumbers = clonedData.map(item => item.rowNumber);
-        
         clonedData.sort((a, b) => {
-            let valueA = a[sortedBy] || '';
-            let valueB = b[sortedBy] || '';
-    
-            // Handle different data types
+            let valueA, valueB;
+            
+            // Handle relationship fields
+            if (sortedBy.includes('_url')) {
+                // Remove _url suffix to get the base field name
+                const baseField = sortedBy.replace('_url', '');
+                if (baseField.includes('.')) {
+                    const [relationshipField, field] = baseField.split('.');
+                    valueA = a[relationshipField] ? a[relationshipField][field] : '';
+                    valueB = b[relationshipField] ? b[relationshipField][field] : '';
+                }
+            } else if (sortedBy.includes('.')) {
+                const [relationshipField, field] = sortedBy.split('.');
+                valueA = a[relationshipField] ? a[relationshipField][field] : '';
+                valueB = b[relationshipField] ? b[relationshipField][field] : '';
+            } else {
+                valueA = sortedBy === 'nameUrl' ? a.Name : a[sortedBy];
+                valueB = sortedBy === 'nameUrl' ? b.Name : b[sortedBy];
+            }
+            
+            // Handle null or empty values
+            if (!valueA && valueA !== 0) return 1;
+            if (!valueB && valueB !== 0) return -1;
+            if (valueA === valueB) return 0;
+            
+            // String comparison
             if (typeof valueA === 'string') {
                 valueA = valueA.toLowerCase();
                 valueB = valueB.toLowerCase();
-            } else if (valueA instanceof Date) {
-                valueA = valueA.getTime();
-                valueB = valueB.getTime();
             }
-    
-            let result = valueA > valueB ? 1 : -1;
-            return sortDirection === 'asc' ? result : -result;
+            
+            // Simple comparison
+            return sortDirection === 'asc' 
+                ? (valueA > valueB ? 1 : -1)
+                : (valueA > valueB ? -1 : 1);
         });
     
-        // Restore the original row numbers after sorting
-        clonedData = clonedData.map((record, index) => ({
+        // Always reassign row numbers after sorting
+        const startingNumber = (this.pageNumber - 1) * this.recordsPerPage + 1;
+        this.filteredData = clonedData.map((record, index) => ({
             ...record,
-            rowNumber: rowNumbers[index]
+            rowNumber: startingNumber + index
         }));
-    
-        this.filteredData = clonedData;
     }
 
+
+    getSortValue(record, field) {
+        const column = this.columns.find(col => col.fieldName === field);
+        // Use sortFieldName if specified, otherwise use fieldName
+        const sortField = column?.sortFieldName || field;
+        
+        // For lookup fields that use _url suffix
+        if (sortField.endsWith('_url')) {
+            const baseField = sortField.replace('_url', '');
+            return record[baseField] || '';
+        }
+        
+        return record[sortField] || '';
+    }
+
+    // Update the wire service to include search parameters
     @wire(getRecords, {
         childObject: '$childObjectApiName',
         parentLookupField: '$parentLookupField',
         parentId: '$recordId',
         fields: '$fieldsArray',
         pageSize: '$recordsPerPage',
-        pageNumber: '$pageNumber'
+        pageNumber: '$pageNumber',
+        searchTerm: '$debouncedSearchTerm',
+        searchableFields: '$searchableFieldsArray'
     })
     wiredRecords(result) {
         this.wiredRecordResult = result;
         this.isLoading = true;
         
         if (result.data) {
-
-            console.log('Received Data:', JSON.stringify(result.data));
-
+            console.log('Received data:', {
+                totalRecords: result.data.totalRecords,
+                currentPage: this.pageNumber,
+                searchTerm: this.debouncedSearchTerm
+            });
+            
             this.processRecords(result.data);
             this.error = undefined;
         } else if (result.error) {
-            console.log('Error in wire:', result.error);
             this.handleError(result.error);
+        }
+        
+        this.isLoading = false;
+    }
+
+    handleError(error) {
+        this.error = error;
+        this.data = [];
+        this.filteredData = [];
+        
+        if (error) {
+            let errorMessage = 'Unknown error';
+            if (Array.isArray(error.body)) {
+                errorMessage = error.body.map(e => e.message).join(', ');
+            } else if (error.body && typeof error.body.message === 'string') {
+                errorMessage = error.body.message;
+            }
+            
+            // Display error toast
+            this.showToast('Error', errorMessage, 'error');
+            
+            // Log error for debugging
+            console.error('Error in wired records:', {
+                error: error,
+                message: errorMessage
+            });
         }
         
         this.isLoading = false;
@@ -395,48 +502,75 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
 
     
     processRecords(data) {
-
-        console.log('Processing Records:', JSON.stringify(data));
-
+        console.log('--- processRecords START ---');
         if (!data || !data.records) {
             console.log('No data or records found');
             this.data = [];
             return;
         }
-
+    
         const startingNumber = (this.pageNumber - 1) * this.recordsPerPage + 1;
+        console.log('Starting Number:', startingNumber);
         
         this.data = data.records.map((record, index) => {
             const flatRecord = { ...record };
+            // ONLY THIS LINE FOR ROW NUMBER
             flatRecord.rowNumber = startingNumber + index;
-
+            
+            console.log(`Processing Record: ${record.Name} - Row Number: ${flatRecord.rowNumber}`);
+            
             // Handle Name field
             if (flatRecord.Name) {
                 flatRecord.nameUrl = `/${flatRecord.Id}`;
             }
-
-            // Handle relationship fields
+    
+            // Process all fields
             this.fieldsArray.forEach(field => {
                 if (field.includes('.')) {
+                    // Handle relationship fields
                     const [relationshipField, relatedField] = field.split('.');
                     if (flatRecord[relationshipField]) {
                         flatRecord[`${field}`] = flatRecord[relationshipField][relatedField];
                         flatRecord[`${field}_url`] = `/${flatRecord[relationshipField].Id}`;
                         flatRecord[`${field}_label`] = flatRecord[relationshipField][relatedField];
                     }
+                } else {
+                    // Handle email fields
+                    if (field.toLowerCase().includes('email') && flatRecord[field]) {
+                        flatRecord[`${field}_url`] = `mailto:${flatRecord[field]}`;
+                    }
+                    
+                    // Handle phone fields
+                    if (field.toLowerCase().includes('phone') && flatRecord[field]) {
+                        const cleanNumber = flatRecord[field].replace(/\D/g, '');
+                        flatRecord[`${field}_formatted`] = this.formatPhoneNumber(flatRecord[field]);
+                        flatRecord[`${field}_url`] = `tel:${cleanNumber}`;
+                    }
                 }
             });
-
-            console.log('Processed Record:', JSON.stringify(flatRecord));
-
+    
             return flatRecord;
         });
-
+    
+        console.log('Processed Records:', JSON.stringify(this.data.map(record => ({
+            id: record.Id,
+            name: record.Name,
+            rowNumber: record.rowNumber
+        }))));
+    
         this.filteredData = [...this.data];
         this.totalPages = Math.ceil(data.totalRecords / this.recordsPerPage);
+        console.log('--- processRecords END ---');
     }
     
 
+    formatPhoneNumber(phoneNumber) {
+        const cleaned = phoneNumber.replace(/\D/g, '');
+        if (cleaned.length === 10) {
+            return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+        }
+        return phoneNumber;
+    }
         connectedCallback() {
             this.initializeColumns();
             // Add event listener for window resize
@@ -465,20 +599,21 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             return this.formatLabel(fieldApi);
         }
 
-            handleSearch(event) {
-                const searchTerm = event.target.value.toLowerCase();
-
-                if (searchTerm) {
-                    this.filteredData = this.data.filter(record => {
-                        return this.searchableFieldsArray.some(field => {
-                            const fieldValue = record[field];
-                            return fieldValue && String(fieldValue).toLowerCase().includes(searchTerm);
-                        });
-                    });
-                } else {
-                    this.filteredData = [...this.data];
-                }
-            }
+    // Update handleSearch to reset pagination
+    handleSearch(event) {
+        this.searchTerm = event.target.value;
+        
+        // Clear any existing timeout
+        if (this.searchTimeout) {
+            clearTimeout(this.searchTimeout);
+        }
+        
+        // Set a new timeout
+        this.searchTimeout = setTimeout(() => {
+            this.debouncedSearchTerm = this.searchTerm;
+            this.pageNumber = 1; // Reset to first page only when searching
+        }, 300);
+    }
 
     handleRowSelection(event) {
         this.selectedRows = event.detail.selectedRows;
@@ -596,8 +731,18 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         return this.pageNumber === this.totalPages;
     }
 
+    // Add getter for totalPages calculation
+    get totalPages() {
+        if (this.wiredRecordResult?.data?.totalRecords) {
+            return Math.ceil(this.wiredRecordResult.data.totalRecords / this.recordsPerPage);
+        }
+        return 0;
+    }
+
+    // Update refresh method
     @api
     refresh() {
+        // Don't reset search term or page number here
         return refreshApex(this.wiredRecordResult);
     }
 

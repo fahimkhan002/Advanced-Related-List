@@ -1,5 +1,5 @@
 @IsTest
-public class RelatedListTest {
+public class RelatedListControllerTest {
     @testSetup
     static void setupTestData() {
         // Create test account

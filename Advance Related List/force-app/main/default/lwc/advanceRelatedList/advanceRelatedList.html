@@ -36,13 +36,6 @@
                                 class="search-input">
                             </lightning-input>
                         </div>
-
-                <!-- Show search results count if searching -->
-                <template if:true={debouncedSearchTerm}>
-                    <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
-                        Showing {wiredRecordResult.data.totalRecords} results for "{debouncedSearchTerm}"
-                    </div>
-                </template>
                         
                         <!-- Action Buttons -->
                         <div class="slds-button-group">
@@ -65,7 +58,7 @@
                                 class="slds-m-left_xx-small"
                                 onclick={handleRefresh}>
                             </lightning-button-icon>
-
+                
                             <!-- New Record Button -->
                             <lightning-button-icon 
                                 icon-name="utility:new"
@@ -74,6 +67,33 @@
                                 class="slds-m-left_xx-small"
                                 onclick={handleNewRecord}>
                             </lightning-button-icon>
+                
+                            <!-- Settings Button and Menu -->
+                            <div class="slds-dropdown-trigger slds-dropdown-trigger_click" style="position: relative;">
+                                <lightning-button-icon 
+                                    class="settings-button slds-m-left_xx-small"
+                                    icon-name="utility:settings"
+                                    alternative-text="Settings"
+                                    title="Settings"
+                                    onclick={handleSettingsClick}>
+                                </lightning-button-icon>
+                            
+                                <div if:true={showSettingsMenu} 
+                                     class="slds-dropdown slds-dropdown_right settings-dropdown"
+                                     style="position: absolute; right: 0; top: 2rem;"
+                                     role="menu">
+                                    <ul class="slds-dropdown__list">
+                                        <li class="slds-dropdown__item" role="presentation">
+                                            <a href="javascript:void(0);" 
+                                               role="menuitem"
+                                               onclick={handleResetColumnWidths}
+                                               class="slds-truncate">
+                                                Reset Column Widths
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -219,7 +239,8 @@
                     onrowselection={handleRowSelection}
                     onrowaction={handleRowAction}
                     hide-checkbox-column="true"
-                    resize-column-disabled
+                    resize-column-to-fit
+                    oncolumnresize={handleColumnResize}
                     suppress-bottom-bar
                     enable-safe-html>
                 </lightning-datatable>

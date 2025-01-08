@@ -59,7 +59,7 @@ public with sharing class RelatedListController {
             // Get paginated records
             String queryStr = 'SELECT ' + String.join(new List<String>(queryFields), ',') + 
                             ' ' + baseQuery + 
-                            ' ORDER BY CreatedDate DESC' +
+                            ' ORDER BY CreatedDate ASC' +
                             ' LIMIT :pageSize OFFSET :offset';
 
             // Debug the final query

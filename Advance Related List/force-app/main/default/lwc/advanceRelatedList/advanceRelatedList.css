@@ -1,3 +1,10 @@
+.table-container {
+    position: relative;
+    width: 100%;
+    min-height: 200px;
+}
+
+
 .icon-wrapper {
     display: inline-block;
     width: 40px;
@@ -31,18 +38,27 @@
 }
 
 .table-container {
-    position: relative;
     width: 100%;
-    min-height: 200px;
+    position: relative;
 }
 
-/* For 5 or fewer columns - stretch to fill screen */
 .table-container.light-columns {
     width: 100%;
-    overflow-x: hidden;
+    overflow-x: hidden; /* Hide scrollbar for 5 or fewer columns */
 }
 
 .table-container.light-columns lightning-datatable {
+    width: 100% !important;
+}
+
+.table-container.heavy-columns {
+    width: 100%;
+    overflow-x: auto;
+}
+
+/* Add minimum width constraint */
+lightning-datatable {
+    min-width: min-content;
     width: 100% !important;
 }
 
@@ -85,4 +101,55 @@
 /* Ensure modal header has relative positioning for close button */
 .slds-modal__header {
     position: relative;
+}
+
+/* Add these styles to your CSS file */
+.slds-dropdown-trigger {
+    position: relative;
+}
+
+.slds-dropdown-trigger .slds-dropdown {
+    visibility: visible;
+    opacity: 1;
+    display: block;
+}
+
+.settings-dropdown {
+    position: absolute;
+    right: 0;
+    top: 2rem;
+    min-width: 200px;
+    background: white;
+    box-shadow: 0 2px 3px 0 rgba(0, 0, 0, 0.16);
+    border: 1px solid rgb(221, 219, 218);
+    border-radius: 0.25rem;
+    z-index: 9000;
+}
+
+.slds-dropdown__item {
+    position: relative;
+}
+
+.slds-dropdown__item > a {
+    padding: 0.5rem 1rem;
+    display: block;
+    cursor: pointer;
+}
+
+.slds-dropdown__item > a:hover {
+    background-color: rgb(243, 242, 242);
+}
+
+.table-container {
+    position: relative;
+    z-index: 1;
+}
+
+/* Fix for column resize handles */
+.slds-table th {
+    position: relative;
+}
+
+.slds-resizable {
+    padding: 0;
 }

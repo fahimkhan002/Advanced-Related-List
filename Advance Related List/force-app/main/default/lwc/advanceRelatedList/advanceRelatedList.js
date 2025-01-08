@@ -62,6 +62,9 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     @track searchTerm = '';
     @track debouncedSearchTerm = '';
     searchTimeout;
+    @track columnWidths = {};
+    @track showSettingsMenu = false;
+    @track defaultColumnWidth = 250; // Default width for columns
 
     get hasIcon() {
         return this.customIconName || this.objectIconName;
@@ -132,92 +135,192 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         }
     }
 
-    initializeColumns() {
-        const columnCount = this.fieldsArray.length;
-        let columnWidth;
-    
-        if (columnCount <= 5) {
-            const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
-            columnWidth = `calc((100% - ${totalFixedWidth}px) / ${columnCount})`;
-        } else {
-            columnWidth = 255;
-        }
-    
-        this.columns = [
-            {
-                label: '#',
-                fieldName: 'rowNumber',
-                type: 'number',
-                sortable: false,
-                fixedWidth: FIXED_WIDTH.number
-            },
-            ...this.fieldsArray.map((field, index) => {
-                const isNameField = field.toLowerCase() === 'name';
-                const isLookupField = field.includes('.');
-                const isEmailField = field.toLowerCase().includes('email');
-                const isPhoneField = field.toLowerCase().includes('phone');
-                const isDateField = this.objectInfo?.fields[field]?.dataType === 'datetime' || 
-                                  this.objectInfo?.fields[field]?.dataType === 'date';
-    
-                let fieldConfig = {
-                    label: this.getColumnLabel(field, index),
-                    fieldName: field,
-                    sortable: true,
-                    wrapText: false,
-                    initialWidth: columnWidth
-                };
-    
-                if (isNameField) {
-                    fieldConfig.type = 'url';
-                    fieldConfig.fieldName = 'nameUrl';
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: 'Name' },
-                        target: '_self'
-                    };
-                } else if (isLookupField) {
-                    fieldConfig.type = 'url';
-                    fieldConfig.fieldName = `${field}_url`;
-                    fieldConfig.sortFieldName = field;  // Add this line
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: field },
-                        target: '_self'
-                    };
-                } else if (isEmailField) {
-                    fieldConfig.type = 'button';
-                    fieldConfig.typeAttributes = {
-                        variant: 'base',
-                        label: { fieldName: field },
-                        name: field,
-                        title: { fieldName: field },
-                        disabled: false
-                    };
-                } else if (isPhoneField) {
-                    fieldConfig.type = 'url';
-                    fieldConfig.fieldName = `${field}_url`;
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: `${field}_formatted` },
-                        target: '_self'
-                    };
-                } else if (isDateField) {
-                    fieldConfig.type = 'date';
-                    fieldConfig.typeAttributes = {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
-                    };
+            // Updated initializeColumns method
+            initializeColumns() {
+                const columnCount = this.fieldsArray.length;
+                
+                // Calculate available width for data columns
+                const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
+                let columnWidth;
+
+                // Get container width
+                const container = this.template.querySelector('.table-container');
+                const availableWidth = container ? container.offsetWidth : 1200;
+
+                if (columnCount <= 4) {
+                    // For 5 or fewer columns, calculate width to fit container
+                    columnWidth = Math.floor((availableWidth - totalFixedWidth) / columnCount);
+                } else {
+                    // For more than 5 columns, use fixed width
+                    columnWidth = 255; // Fixed width to ensure scrolling
                 }
-    
-                return fieldConfig;
-            }),
-            {
-                type: 'action',
-                typeAttributes: { rowActions: actions },
-                fixedWidth: FIXED_WIDTH.action
+
+                // Initialize the columns array
+                this.columns = [
+                    // Row Number Column
+                    {
+                        label: '#',
+                        fieldName: 'rowNumber',
+                        type: 'number',
+                        sortable: false,
+                        fixedWidth: FIXED_WIDTH.number,
+                        initialWidth: FIXED_WIDTH.number
+                    },
+                    
+                    // Data Columns
+                    ...this.fieldsArray.map((field, index) => {
+                        const isNameField = field.toLowerCase() === 'name';
+                        const isLookupField = field.includes('.');
+                        const isEmailField = field.toLowerCase().includes('email');
+                        const isPhoneField = field.toLowerCase().includes('phone');
+                        const isDateField = this.objectInfo?.fields[field]?.dataType === 'datetime' || 
+                                        this.objectInfo?.fields[field]?.dataType === 'date';
+
+                        let fieldConfig = {
+                            label: this.getColumnLabel(field, index),
+                            fieldName: isNameField ? 'nameUrl' : field,
+                            sortable: this.sortableFieldsArray.includes(field),
+                            wrapText: true,
+                            initialWidth: this.columnWidths[field] || columnWidth
+                        };
+
+                        // Add specific configurations based on field type
+                        if (isNameField) {
+                            fieldConfig.type = 'url';
+                            fieldConfig.typeAttributes = {
+                                label: { fieldName: 'Name' },
+                                target: '_self'
+                            };
+                        } else if (isLookupField) {
+                            fieldConfig.type = 'url';
+                            fieldConfig.fieldName = `${field}_url`;
+                            fieldConfig.sortFieldName = field;
+                            fieldConfig.typeAttributes = {
+                                label: { fieldName: field },
+                                target: '_self'
+                            };
+                        } else if (isEmailField || isPhoneField) {
+                            fieldConfig.type = 'button';
+                            fieldConfig.typeAttributes = {
+                                variant: 'base',
+                                label: { fieldName: field },
+                                name: field,
+                                title: { fieldName: field },
+                                disabled: false
+                            };
+                        } else if (isDateField) {
+                            fieldConfig.type = 'date';
+                            fieldConfig.typeAttributes = {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit'
+                            };
+                        }
+
+                        return fieldConfig;
+                    }),
+                    
+                    // Action Column
+                    {
+                        type: 'action',
+                        typeAttributes: { rowActions: actions },
+                        fixedWidth: FIXED_WIDTH.action,
+                        initialWidth: FIXED_WIDTH.action
+                    }
+                ];
+
+                // Update CSS classes for table container
+                const tableContainer = this.template.querySelector('.table-container');
+                if (tableContainer) {
+                    if (columnCount <= 5) {
+                        tableContainer.classList.add('light-columns');
+                        tableContainer.classList.remove('heavy-columns');
+                    } else {
+                        tableContainer.classList.remove('light-columns');
+                        tableContainer.classList.add('heavy-columns');
+                    }
+                }
             }
-        ];
-    
-        this.updateTableResponsiveness();
-    }
+
+        
+
+                // Add the column resize handler
+        handleColumnResize(event) {
+            const columnName = event.detail.columnName;
+            const newWidth = event.detail.width;
+            
+            // Store the new width in our tracking object
+            this.columnWidths[columnName] = newWidth;
+            
+            // Update the column definition
+            this.columns = this.columns.map(column => {
+                if (column.fieldName === columnName) {
+                    return { ...column, initialWidth: newWidth };
+                }
+                return column;
+            });
+        }
+
+             // Add settings menu handlers
+             handleSettingsClick(event) {
+                console.log('Settings clicked', {
+                    currentState: this.showSettingsMenu,
+                    event: event
+                });
+                event.stopPropagation();
+                this.showSettingsMenu = !this.showSettingsMenu;
+                console.log('New state:', this.showSettingsMenu);
+            }
+
+        // Method to handle resetting column widths
+        handleResetColumnWidths(event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            
+            // Reset column widths storage
+            this.columnWidths = {};
+            
+            // Calculate column width based on count
+            const columnCount = this.fieldsArray.length;
+            const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
+            let columnWidth;
+            
+            // For 5 or fewer columns, calculate based on container width
+            // For more than 5 columns, use fixed width
+            if (columnCount <= 5) {
+                const container = this.template.querySelector('.table-container');
+                const availableWidth = container ? container.offsetWidth : 1200;
+                columnWidth = Math.floor((availableWidth - totalFixedWidth) / columnCount);
+            } else {
+                columnWidth = 255; // Fixed width for many columns
+            }
+            
+            // Reset columns with calculated width
+            this.columns = this.columns.map(column => {
+                if (column.fieldName === 'rowNumber') {
+                    return { ...column, initialWidth: FIXED_WIDTH.number };
+                } else if (column.type === 'action') {
+                    return { ...column, initialWidth: FIXED_WIDTH.action };
+                } else {
+                    return { ...column, initialWidth: columnWidth };
+                }
+            });
+            
+            // Get datatable component and force refresh
+            const datatable = this.template.querySelector('lightning-datatable');
+            if (datatable) {
+                datatable.columns = [...this.columns];
+            }
+            
+            // Close settings menu and update table responsiveness
+            this.showSettingsMenu = false;
+            this.updateTableResponsiveness();
+            
+            // Show success toast
+            this.showToast('Success', 'Column widths have been reset', 'success');
+        }
     
     // Add method for table responsiveness
     updateTableResponsiveness() {
@@ -571,17 +674,62 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         }
         return phoneNumber;
     }
+        // Update connectedCallback to handle click outside
         connectedCallback() {
+            // Initialize columns
             this.initializeColumns();
-            // Add event listener for window resize
-            this.handleResize = () => this.updateTableResponsiveness();
+            
+            // Add debounced resize handler
+            this.handleResize = this.debounce(() => {
+                this.initializeColumns();
+                this.updateTableResponsiveness();
+            }, 250);
+            
             window.addEventListener('resize', this.handleResize);
-
+            
+            // Add click outside listener for settings menu
+            this.handleClickOutside = (event) => {
+                const settingsMenu = this.template.querySelector('.settings-dropdown');
+                const settingsButton = this.template.querySelector('.settings-button');
+                
+                if (this.showSettingsMenu && 
+                    settingsMenu && 
+                    settingsButton && 
+                    !settingsMenu.contains(event.target) && 
+                    !settingsButton.contains(event.target)) {
+                    this.showSettingsMenu = false;
+                }
+            };
+            
+            document.addEventListener('click', this.handleClickOutside);
+            
+            // Initial table responsiveness update
+            this.updateTableResponsiveness();
+        }
+        
+        // Add debounce utility method
+        debounce(fn, delay) {
+            let timeoutId;
+            return (...args) => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+                timeoutId = setTimeout(() => {
+                    fn(...args);
+                }, delay);
+            };
         }
 
         disconnectedCallback() {
-            window.removeEventListener('resize', this.handleResize);
-
+            // Remove window resize listener
+            if (this.handleResize) {
+                window.removeEventListener('resize', this.handleResize);
+            }
+            
+            // Remove document click listener
+            if (this.handleClickOutside) {
+                document.removeEventListener('click', this.handleClickOutside);
+            }
         }
 
 

@@ -67,6 +67,16 @@
                                 class="slds-m-left_xx-small"
                                 onclick={handleNewRecord}>
                             </lightning-button-icon>
+                            
+                            <template if:true={showBulkDeleteButton}>
+                                <lightning-button-icon 
+                                    icon-name="utility:delete"
+                                    alternative-text="Delete Selected"
+                                    title="Delete Selected"
+                                    class="slds-m-left_xx-small"
+                                    onclick={handleBulkDelete}>
+                                </lightning-button-icon>
+                            </template>
                 
                             <!-- Settings Button and Menu -->
                             <div class="slds-dropdown-trigger slds-dropdown-trigger_click" style="position: relative;">
@@ -230,22 +240,59 @@
         <div class="slds-card__body">
             <div class="table-container">
                 <lightning-datatable
-                    key-field="Id"
-                    data={filteredData}
-                    columns={columns}
-                    onsort={handleSort}
-                    sorted-by={sortedBy}
-                    sorted-direction={sortedDirection}
-                    onrowselection={handleRowSelection}
-                    onrowaction={handleRowAction}
-                    hide-checkbox-column="true"
-                    resize-column-to-fit
-                    oncolumnresize={handleColumnResize}
-                    suppress-bottom-bar
-                    enable-safe-html>
-                </lightning-datatable>
+                key-field="Id"
+                data={filteredData}
+                columns={columns}
+                onsort={handleSort}
+                sorted-by={sortedBy}
+                sorted-direction={sortedDirection}
+                onrowselection={handleRowSelection}
+                onrowaction={handleRowAction}
+                selected-rows={preSelectedRows}
+                resize-column-to-fit
+                oncolumnresize={handleColumnResize}
+                suppress-bottom-bar
+                max-row-selection={maxRowSelection}
+                enable-safe-html>
+            </lightning-datatable>
             </div>
         </div>
+
+
+
+       <!--  // Add Bulk Delete Confirmation Modal -->
+            <template if:true={showBulkDeleteModal}>
+                <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-bulk-delete" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
+                    <div class="slds-modal__container">
+                        <header class="slds-modal__header slds-theme_alert-texture slds-theme_error">
+                            <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseBulkDeleteModal}>
+                                <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
+                            </button>
+                            <h2 id="modal-heading-bulk-delete" class="slds-modal__title slds-hyphenate">
+                                Delete Selected Records
+                            </h2>
+                        </header>
+                        <div class="slds-modal__content slds-p-around_medium">
+                            <p class="slds-text-heading_small slds-text-align_center">
+                                Are you sure you want to delete {selectedRows.length} selected records? This action cannot be undone.
+                            </p>
+                        </div>
+                        <footer class="slds-modal__footer">
+                            <lightning-button 
+                                label="Cancel" 
+                                onclick={handleCloseBulkDeleteModal}>
+                            </lightning-button>
+                            <lightning-button 
+                                variant="destructive" 
+                                label="Delete" 
+                                onclick={handleConfirmBulkDelete}
+                                class="slds-m-left_x-small">
+                            </lightning-button>
+                        </footer>
+                    </div>
+                </section>
+                <div class="slds-backdrop slds-backdrop_open"></div>
+            </template>
             
             <!-- Updated Pagination -->
             <div class="slds-grid slds-grid_align-center slds-m-top_small">

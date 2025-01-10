@@ -4,6 +4,7 @@ import { refreshApex } from '@salesforce/apex';
 import { getObjectInfo } from 'lightning/uiObjectInfoApi';
 import { encodeDefaultFieldValues } from 'lightning/pageReferenceUtils';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import USER_CURRENCY from '@salesforce/i18n/currency';
 import getRecords from '@salesforce/apex/RelatedListController.getRecords';
 import deleteRecord from '@salesforce/apex/RelatedListController.deleteRecord';
 
@@ -65,6 +66,12 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     @track columnWidths = {};
     @track showSettingsMenu = false;
     @track defaultColumnWidth = 250; // Default width for columns
+    @track showBulkDeleteModal = false;
+    @track showBulkDeleteButton = false;
+    @track preSelectedRows = [];
+    maxRowSelection = 100; // or whatever maximum number you want to allow
+    @track userCurrency = USER_CURRENCY;
+
 
     get hasIcon() {
         return this.customIconName || this.objectIconName;
@@ -112,11 +119,34 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     @wire(getObjectInfo, { objectApiName: '$childObjectApiName' })
     wiredObjectInfo({ error, data }) {
         if (data) {
+            console.log('Object Info received:', this.childObjectApiName);
+            console.log('Full Object Info:', data);
+            
+            // More detailed debugging for fields
+            console.log('All Fields:', Object.entries(data.fields).map(([name, field]) => ({
+                name,
+                dataType: field.dataType,
+                label: field.label
+            })));
+            
+            // Debug currency fields specifically
+            const currencyFields = Object.entries(data.fields)
+                .filter(([_, field]) => field.dataType === 'Currency')
+                .map(([name, field]) => ({
+                    name,
+                    dataType: field.dataType,
+                    label: field.label,
+                    defaultCurrencyCode: field.defaultCurrencyCode,
+                    updateable: field.updateable,
+                    calculated: field.calculated
+                }));
+            console.log('Currency Fields Found:', currencyFields);
+            
             this.objectInfo = data;
             this.childObjectLabel = data.label;
             this.objectIconName = this.customIconName || data.themeInfo?.iconUrl;
             
-            // Get all fields metadata for edit form
+            // Get all fields metadata for edit form with more detail
             const fields = data.fields;
             this.editableFields = Object.keys(fields)
                 .filter(fieldApi => {
@@ -126,27 +156,38 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 .map(fieldApi => ({
                     fieldApiName: fieldApi,
                     required: fields[fieldApi].required,
-                    label: fields[fieldApi].label
+                    label: fields[fieldApi].label,
+                    dataType: fields[fieldApi].dataType,
+                    defaultCurrencyCode: fields[fieldApi].defaultCurrencyCode,
+                    updateable: fields[fieldApi].updateable,
+                    calculated: fields[fieldApi].calculated
                 }));
-                
+    
+            console.log('Editable Fields:', this.editableFields);
+            
+            // Initialize columns after complete field analysis
             this.initializeColumns();
         } else if (error) {
             console.error('Error loading object info:', error);
+            console.error('Error details:', JSON.stringify(error));
         }
     }
 
             // Updated initializeColumns method
             initializeColumns() {
+                console.log('Fields to display:', this.fieldsToDisplay);
+                console.log('Fields array:', this.fieldsArray);
+                
                 const columnCount = this.fieldsArray.length;
                 
                 // Calculate available width for data columns
                 const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
                 let columnWidth;
-
+            
                 // Get container width
                 const container = this.template.querySelector('.table-container');
                 const availableWidth = container ? container.offsetWidth : 1200;
-
+            
                 if (columnCount <= 4) {
                     // For 5 or fewer columns, calculate width to fit container
                     columnWidth = Math.floor((availableWidth - totalFixedWidth) / columnCount);
@@ -154,17 +195,23 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                     // For more than 5 columns, use fixed width
                     columnWidth = 255; // Fixed width to ensure scrolling
                 }
-
+            
                 // Initialize the columns array
                 this.columns = [
                     // Row Number Column
                     {
                         label: '#',
+                        type: 'text',
                         fieldName: 'rowNumber',
-                        type: 'number',
                         sortable: false,
                         fixedWidth: FIXED_WIDTH.number,
-                        initialWidth: FIXED_WIDTH.number
+                        initialWidth: FIXED_WIDTH.number,
+                        cellAttributes: { 
+                            class: 'slds-text-align_right slds-p-right_small'
+                        },
+                        typeAttributes: {
+                            label: { fieldName: 'rowNumber' }
+                        }
                     },
                     
                     // Data Columns
@@ -175,40 +222,97 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                         const isPhoneField = field.toLowerCase().includes('phone');
                         const isDateField = this.objectInfo?.fields[field]?.dataType === 'datetime' || 
                                         this.objectInfo?.fields[field]?.dataType === 'date';
-
+                        const fieldType = this.objectInfo?.fields[field]?.dataType?.toLowerCase();
+                        const fieldInfo = this.objectInfo?.fields[field];
+            
                         let fieldConfig = {
                             label: this.getColumnLabel(field, index),
-                            fieldName: isNameField ? 'nameUrl' : field,
+                            fieldName: field,
                             sortable: this.sortableFieldsArray.includes(field),
                             wrapText: true,
                             initialWidth: this.columnWidths[field] || columnWidth
                         };
-
-                        // Add specific configurations based on field type
+            
+                        // Handle different field types
                         if (isNameField) {
                             fieldConfig.type = 'url';
+                            fieldConfig.fieldName = 'nameUrl';
                             fieldConfig.typeAttributes = {
                                 label: { fieldName: 'Name' },
                                 target: '_self'
                             };
-                        } else if (isLookupField) {
+                        } 
+                        else if (isLookupField) {
                             fieldConfig.type = 'url';
                             fieldConfig.fieldName = `${field}_url`;
-                            fieldConfig.sortFieldName = field;
                             fieldConfig.typeAttributes = {
                                 label: { fieldName: field },
                                 target: '_self'
                             };
-                        } else if (isEmailField || isPhoneField) {
+                        }
+                        // Email field with icon
+                        else if (isEmailField) {
                             fieldConfig.type = 'button';
                             fieldConfig.typeAttributes = {
-                                variant: 'base',
                                 label: { fieldName: field },
                                 name: field,
-                                title: { fieldName: field },
-                                disabled: false
+                                iconName: { fieldName: `${field}_hasIcon` },
+                                iconPosition: 'left',
+                                variant: 'base',
+                                disabled: false,
+                                title: { fieldName: field }
                             };
-                        } else if (isDateField) {
+                        }
+                        // Phone field with icon
+                        else if (isPhoneField) {
+                            fieldConfig.type = 'button';
+                            fieldConfig.typeAttributes = {
+                                label: { fieldName: field },
+                                name: field,
+                                iconName: { fieldName: `${field}_hasIcon` },
+                                iconPosition: 'left',
+                                variant: 'base',
+                                disabled: { fieldName: `${field}_disabled` },
+                                title: { fieldName: field },
+                                class: 'phone-button'
+                            };
+                        }
+                        // Currency field
+                        else if (fieldType === 'currency') {
+                            fieldConfig = {
+                                ...fieldConfig,
+                                type: 'currency',
+                                typeAttributes: {
+                                    currencyCode: { fieldName: 'CurrencyIsoCode' },
+                                    currencyDisplayAs: 'symbol',
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                },
+                                cellAttributes: { 
+                                    alignment: 'right'
+                                }
+                            };
+                            console.log('Currency column config:', fieldConfig);
+                        }
+                        // Percent field
+                        else if (fieldType === 'percent') {
+                            fieldConfig.type = 'percent';
+                            fieldConfig.typeAttributes = {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                                step: '0.01'
+                            };
+                        }
+                        // Number field
+                        else if (fieldType === 'double' || fieldType === 'integer') {
+                            fieldConfig.type = 'number';
+                            fieldConfig.typeAttributes = {
+                                minimumFractionDigits: fieldType === 'integer' ? 0 : 2,
+                                maximumFractionDigits: fieldType === 'integer' ? 0 : 2
+                            };
+                        }
+                        // Date field
+                        else if (fieldType === 'date') {
                             fieldConfig.type = 'date';
                             fieldConfig.typeAttributes = {
                                 year: 'numeric',
@@ -216,7 +320,26 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                                 day: '2-digit'
                             };
                         }
-
+                        // DateTime field
+                        else if (fieldType === 'datetime') {
+                            fieldConfig.type = 'date';
+                            fieldConfig.typeAttributes = {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            };
+                        }
+                        // Boolean field
+                        else if (fieldType === 'boolean') {
+                            fieldConfig.type = 'boolean';
+                        }
+                        // Rich Text field
+                        else if (fieldType === 'rich_textarea') {
+                            fieldConfig.type = 'richText';
+                        }
+            
                         return fieldConfig;
                     }),
                     
@@ -228,7 +351,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                         initialWidth: FIXED_WIDTH.action
                     }
                 ];
-
+            
                 // Update CSS classes for table container
                 const tableContainer = this.template.querySelector('.table-container');
                 if (tableContainer) {
@@ -240,6 +363,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                         tableContainer.classList.add('heavy-columns');
                     }
                 }
+            
+                console.log('Final columns configuration:', this.columns);
             }
 
         
@@ -362,7 +487,6 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         const action = event.detail.action;
         const row = event.detail.row;
     
-        // If it's a standard action (edit, delete, etc.)
         if (action.name === 'edit' || action.name === 'delete' || action.name === 'view') {
             this.selectedRecordId = row.Id;
     
@@ -376,14 +500,27 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 case 'delete':
                     this.showDeleteModal = true;
                     break;
-                default:
-                    break;
             }
         } 
-        // If it's an email field click
-        else if (row[action.name] && action.name.toLowerCase().includes('email')) {
-            // Open email client
-            window.location.href = `mailto:${row[action.name]}`;
+        // Handle email field click
+        else if (action.name && action.name.toLowerCase().includes('email')) {
+            const email = row[action.name];
+            if (email) {
+                window.location.href = `mailto:${email}`;
+            }
+        }
+        // Handle phone field click
+        else if (action.name && (action.name.toLowerCase().includes('phone') || action.name.toLowerCase().includes('mobile'))) {
+            const phone = row[action.name];
+            if (phone) {
+                // Using NavigationMixin to handle phone
+                this[NavigationMixin.Navigate]({
+                    type: 'standard__webPage',
+                    attributes: {
+                        url: `tel:${phone.replace(/\D/g, '')}`
+                    }
+                });
+            }
         }
     }
 
@@ -581,6 +718,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.error = error;
         this.data = [];
         this.filteredData = [];
+        this.selectedRows = []; // Clear selections on error
+        this.showBulkDeleteButton = false;
         
         if (error) {
             let errorMessage = 'Unknown error';
@@ -590,10 +729,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 errorMessage = error.body.message;
             }
             
-            // Display error toast
             this.showToast('Error', errorMessage, 'error');
-            
-            // Log error for debugging
             console.error('Error in wired records:', {
                 error: error,
                 message: errorMessage
@@ -612,22 +748,47 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             return;
         }
     
+        // Dynamically get currency fields from fieldsArray that are marked as currency in objectInfo
+        const currencyFields = this.fieldsArray.filter(field => 
+            this.objectInfo?.fields[field]?.dataType?.toLowerCase() === 'currency'
+        );
+        
+        console.log('Dynamic Currency Fields Found:', currencyFields);
+        console.log('Fields to Display:', this.fieldsArray);
+        console.log('Sample Record Data:', data.records[0]);
+    
         const startingNumber = (this.pageNumber - 1) * this.recordsPerPage + 1;
-        console.log('Starting Number:', startingNumber);
         
         this.data = data.records.map((record, index) => {
             const flatRecord = { ...record };
-            // ONLY THIS LINE FOR ROW NUMBER
             flatRecord.rowNumber = startingNumber + index;
             
-            console.log(`Processing Record: ${record.Name} - Row Number: ${flatRecord.rowNumber}`);
-            
+            // Process currency fields that are in our fieldsToDisplay
+            currencyFields.forEach(fieldName => {
+                console.log(`Processing currency field ${fieldName}:`, {
+                    value: flatRecord[fieldName],
+                    type: typeof flatRecord[fieldName],
+                    hasValue: fieldName in flatRecord
+                });
+    
+                if (fieldName in flatRecord) {
+                    const numValue = parseFloat(flatRecord[fieldName]);
+                    if (!isNaN(numValue)) {
+                        flatRecord[fieldName] = numValue;
+                    }
+                    // Set CurrencyIsoCode if not present
+                    if (!flatRecord.CurrencyIsoCode) {
+                        flatRecord.CurrencyIsoCode = this.userCurrency || 'USD';
+                    }
+                }
+            });
+    
             // Handle Name field
             if (flatRecord.Name) {
                 flatRecord.nameUrl = `/${flatRecord.Id}`;
             }
     
-            // Process all fields
+            // Process other fields
             this.fieldsArray.forEach(field => {
                 if (field.includes('.')) {
                     // Handle relationship fields
@@ -639,15 +800,22 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                     }
                 } else {
                     // Handle email fields
-                    if (field.toLowerCase().includes('email') && flatRecord[field]) {
-                        flatRecord[`${field}_url`] = `mailto:${flatRecord[field]}`;
+                    if (field.toLowerCase().includes('email')) {
+                        flatRecord[`${field}_hasIcon`] = flatRecord[field] ? 'utility:email' : undefined;
+                        if (flatRecord[field]) {
+                            flatRecord[`${field}_url`] = `mailto:${flatRecord[field]}`;
+                        }
                     }
                     
                     // Handle phone fields
-                    if (field.toLowerCase().includes('phone') && flatRecord[field]) {
-                        const cleanNumber = flatRecord[field].replace(/\D/g, '');
-                        flatRecord[`${field}_formatted`] = this.formatPhoneNumber(flatRecord[field]);
-                        flatRecord[`${field}_url`] = `tel:${cleanNumber}`;
+                    if (field.toLowerCase().includes('phone') || field.toLowerCase().includes('mobile')) {
+                        flatRecord[`${field}_hasIcon`] = flatRecord[field] ? 'utility:phone_portrait' : undefined;
+                        flatRecord[`${field}_disabled`] = !flatRecord[field];
+                        if (flatRecord[field]) {
+                            const cleanNumber = flatRecord[field].replace(/\D/g, '');
+                            flatRecord[`${field}_formatted`] = this.formatPhoneNumber(flatRecord[field]);
+                            flatRecord[`${field}_value`] = cleanNumber;
+                        }
                     }
                 }
             });
@@ -655,13 +823,24 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             return flatRecord;
         });
     
-        console.log('Processed Records:', JSON.stringify(this.data.map(record => ({
+        // Debug the processed data
+        const processedCurrencyFields = this.data.map(record => ({
             id: record.Id,
             name: record.Name,
-            rowNumber: record.rowNumber
-        }))));
+            currencyFields: currencyFields.reduce((acc, field) => {
+                acc[field] = record[field];
+                return acc;
+            }, {})
+        }));
+        console.log('Processed Records with Currency:', processedCurrencyFields);
     
         this.filteredData = [...this.data];
+    
+        // Maintain selections after refresh
+        if (this.preSelectedRows.length > 0) {
+            const selectedIds = new Set(this.preSelectedRows);
+            this.selectedRows = this.filteredData.filter(row => selectedIds.has(row.Id));
+        }
         this.totalPages = Math.ceil(data.totalRecords / this.recordsPerPage);
         console.log('--- processRecords END ---');
     }
@@ -763,9 +942,67 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         }, 300);
     }
 
-    handleRowSelection(event) {
-        this.selectedRows = event.detail.selectedRows;
-    }
+        // Update your handleRowSelection method
+        handleRowSelection(event) {
+            // Get the selected rows from the event
+            const selectedRows = event.detail.selectedRows;
+            
+            // Store the IDs of selected rows
+            this.preSelectedRows = selectedRows.map(row => row.Id);
+            
+            // Store the full selected row data
+            this.selectedRows = selectedRows;
+            
+            // Show/hide bulk delete button
+            this.showBulkDeleteButton = this.selectedRows.length > 0;
+            
+            // Debug logging
+            console.log('Number of selected rows:', this.selectedRows.length);
+            console.log('Selected row IDs:', this.preSelectedRows);
+        }
+
+        // Add method to handle bulk delete
+        async handleBulkDelete() {
+            if (this.selectedRows.length === 0) return;
+            this.showBulkDeleteModal = true;
+        }
+
+        // Add method to confirm bulk delete
+        async handleConfirmBulkDelete() {
+            try {
+                this.isLoading = true;
+                const recordIds = this.preSelectedRows;
+                
+                const deletePromises = recordIds.map(recordId => 
+                    deleteRecord({ 
+                        recordId: recordId, 
+                        objectName: this.childObjectApiName 
+                    })
+                );
+        
+                await Promise.all(deletePromises);
+                
+                this.showToast('Success', `${recordIds.length} records deleted successfully`, 'success');
+                
+                // Clear selections
+                this.preSelectedRows = [];
+                this.selectedRows = [];
+                this.showBulkDeleteButton = false;
+                this.showBulkDeleteModal = false;
+                
+                this.handleRefresh();
+            } catch (error) {
+                console.error('Error in bulk delete:', error);
+                this.showToast('Error', error.body?.message || 'Failed to delete records', 'error');
+            } finally {
+                this.isLoading = false;
+            }
+        }
+
+        // Add method to close bulk delete modal
+        handleCloseBulkDeleteModal() {
+            this.showBulkDeleteModal = false;
+        }
 
    // Update handleNewRecord method
    handleNewRecord() {
@@ -894,20 +1131,29 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         return refreshApex(this.wiredRecordResult);
     }
 
-    handleRefresh() {
-        console.log('Refreshing datatable...');
-        this.isLoading = true; // Show spinner
-        refreshApex(this.wiredRecordResult)
-            .then(() => {
-                console.log('Data refreshed successfully');
-            })
-            .catch(error => {
-                console.error('Error refreshing data:', error);
-            })
-            .finally(() => {
-                this.isLoading = false; // Hide spinner
-            });
-    }
+        // Update your handleRefresh method
+        handleRefresh() {
+            this.isLoading = true;
+            
+            // Store current selections
+            const currentSelections = [...this.preSelectedRows];
+            
+            refreshApex(this.wiredRecordResult)
+                .then(() => {
+                    // Restore selections
+                    if (currentSelections.length > 0) {
+                        this.preSelectedRows = currentSelections;
+                        this.showBulkDeleteButton = true;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing data:', error);
+                    this.showToast('Error', 'Failed to refresh data', 'error');
+                })
+                .finally(() => {
+                    this.isLoading = false;
+                });
+        }
     
     
 

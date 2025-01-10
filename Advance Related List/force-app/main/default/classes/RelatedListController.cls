@@ -95,6 +95,15 @@ public with sharing class RelatedListController {
         }
     }
 
+        @AuraEnabled
+        public static void updateRecords(List<SObject> records) {
+            try {
+                update records;
+            } catch (Exception e) {
+                throw new AuraHandledException('Error updating records: ' + e.getMessage());
+            }
+        }
+
     public class RelatedListWrapper {
         @AuraEnabled public List<SObject> records;
         @AuraEnabled public Integer totalRecords;

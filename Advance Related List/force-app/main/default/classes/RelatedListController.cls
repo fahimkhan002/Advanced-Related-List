@@ -184,14 +184,16 @@ public with sharing class RelatedListController {
         List<String> searchableFields
     ) {
         String whereClause = String.escapeSingleQuotes(parentLookupField) + 
-                           ' = \'' + String.escapeSingleQuotes(parentId) + '\'';
+                        ' = \'' + String.escapeSingleQuotes(parentId) + '\'';
 
         if (String.isNotBlank(searchTerm) && searchableFields != null && !searchableFields.isEmpty()) {
             List<String> searchConditions = new List<String>();
+            // Create the search value with escaped special characters
             String searchValue = '%' + String.escapeSingleQuotes(searchTerm) + '%';
             
             for (String field : searchableFields) {
-                searchConditions.add(field + ' LIKE :searchValue');
+                // Instead of using bind variable, directly include the search value
+                searchConditions.add(field + ' LIKE \'' + searchValue + '\'');
             }
             
             if (!searchConditions.isEmpty()) {

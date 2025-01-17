@@ -1110,7 +1110,6 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     //Public API Methods
     @api
     refresh() {
-        // Don't reset search term or page number here
         return refreshApex(this.wiredRecordResult);
     }
 

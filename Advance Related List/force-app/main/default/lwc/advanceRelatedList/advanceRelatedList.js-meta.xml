@@ -1,28 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
-    <apiVersion>58.0</apiVersion>
+    <!-- Basic Component Configuration -->
+    <apiVersion>60.0</apiVersion>
     <isExposed>true</isExposed>
+
+    <!-- Component Targets -->
     <targets>
         <target>lightning__RecordPage</target>
         <target>lightning__AppPage</target>
         <target>lightning__HomePage</target>
     </targets>
+
+    <!-- Component Configuration Properties -->
     <targetConfigs>
         <targetConfig targets="lightning__RecordPage,lightning__AppPage,lightning__HomePage">
+            <!-- Required Properties -->
             <property 
                 name="childObjectApiName" 
                 type="String" 
                 label="Child Object API Name" 
                 required="true" 
-                description="API name of the child object (e.g., Hospital_Affiliation__c)" 
+                description="API name of the child object (e.g., Contact)" 
             />
+            
             <property 
                 name="parentLookupField" 
                 type="String" 
                 label="Parent Lookup Field API Name" 
                 required="true" 
-                description="API name of the lookup field in child object (e.g., Provider__c)" 
+                description="API name of the lookup field in child object (e.g., AccountId)" 
             />
+            
             <property 
                 name="fieldsToDisplay" 
                 type="String" 
@@ -30,13 +38,7 @@
                 required="true" 
                 description="Comma-separated list of field API names (e.g., Name,Status__c,Start_Date__c)" 
             />
-            <property 
-                name="columnLabels" 
-                type="String" 
-                label="Column Labels" 
-                required="false" 
-                description="Optional: Comma-separated list of custom column labels matching fields order" 
-            />
+            
             <property 
                 name="searchableFields" 
                 type="String" 
@@ -44,6 +46,16 @@
                 required="true" 
                 description="Comma-separated list of field API names to enable search" 
             />
+
+            <!-- Optional Properties -->
+            <property 
+                name="columnLabels" 
+                type="String" 
+                label="Column Labels" 
+                required="false" 
+                description="Optional: Comma-separated list of custom column labels matching fields order" 
+            />
+            
             <property 
                 name="sortableFields" 
                 type="String" 
@@ -51,6 +63,7 @@
                 required="false" 
                 description="Comma-separated list of fields that should be sortable" 
             />
+            
             <property 
                 name="recordsPerPage" 
                 type="Integer" 
@@ -60,6 +73,8 @@
                 max="100" 
                 description="Number of records to display per page (1-100)" 
             />
+
+            <!-- Flow Configuration -->
             <property 
                 name="flowName" 
                 type="String" 
@@ -67,6 +82,7 @@
                 required="false" 
                 description="API name of the flow to launch (optional)" 
             />
+            
             <property 
                 name="flowTitle" 
                 type="String" 
@@ -75,6 +91,8 @@
                 required="false" 
                 description="Title to display on the flow modal" 
             />
+
+            <!-- Display Configuration -->
             <property 
                 name="listTitle" 
                 type="String" 
@@ -82,6 +100,7 @@
                 required="false" 
                 description="Custom title for the related list. If blank, uses '[Object] Related List'" 
             />
+            
             <property 
                 name="customIconName" 
                 type="String" 
@@ -89,6 +108,7 @@
                 required="false" 
                 description="SLDS icon name (e.g., standard:account)" 
             />
+            
             <property 
                 name="iconBackgroundColor" 
                 type="String" 
@@ -97,7 +117,6 @@
                 required="false" 
                 description="Background color for the icon (e.g., #f4b400)" 
             />
-            
         </targetConfig>
     </targetConfigs>
 </LightningComponentBundle>

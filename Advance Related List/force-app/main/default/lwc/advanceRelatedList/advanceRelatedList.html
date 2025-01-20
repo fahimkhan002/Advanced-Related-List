@@ -1,7 +1,33 @@
 <!-- Template structure for Advanced Related List Component -->
 <template>
     <div class="slds-card">
+        
+                <!-- Permission Error Alert -->
+                <template if:true={permissionError}>
+                    <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
+                        <span class="slds-assistive-text">error</span>
+                        <span class="slds-icon_container slds-icon-utility-error slds-m-right_x-small">
+                            <lightning-icon icon-name="utility:error"
+                                          alternative-text="Error"
+                                          size="x-small"
+                                          variant="inverse">
+                            </lightning-icon>
+                        </span>
+                        <h2>{permissionErrorMessage}</h2>
+                        <div class="slds-notify__close">
+                            <lightning-button-icon
+                                icon-name="utility:close"
+                                size="small"
+                                variant="bare-inverse"
+                                onclick={handleDismissPermissionError}
+                                alternative-text="Close">
+                            </lightning-button-icon>
+                        </div>
+                    </div>
+                </template>
+        
         <!-- 1. Header Section -->
+
         <div class="slds-card__header">
             <div class="slds-grid slds-grid_vertical-align-center slds-grid_align-spread">
                 <!-- 1.1 Title and Icon Section -->
@@ -39,7 +65,7 @@
                         <!-- Action Buttons -->
                         <div class="slds-button-group">
                             <!-- Flow Button -->
-                            <template if:true={hasFlowName}>
+                            <template if:true={showFlowButton}>
                                 <lightning-button-icon 
                                     icon-name="utility:flow"
                                     alternative-text="Run Flow"
@@ -59,23 +85,27 @@
                             </lightning-button-icon>
                 
                             <!-- New Record Button -->
-                            <lightning-button-icon 
-                                icon-name="utility:new"
-                                alternative-text="New"
-                                title="New"
-                                class="slds-m-left_xx-small"
-                                onclick={handleNewRecord}>
-                            </lightning-button-icon>
+                            <template if:true={userPermissions.isCreateable}>
+                                <lightning-button-icon 
+                                    icon-name="utility:new"
+                                    alternative-text="New"
+                                    title="New"
+                                    class="slds-m-left_xx-small"
+                                    onclick={handleNewRecord}>
+                                </lightning-button-icon>
+                            </template>
                             
                             <!-- Bulk Delete Button -->
                             <template if:true={showBulkDeleteButton}>
-                                <lightning-button-icon 
-                                    icon-name="utility:delete"
-                                    alternative-text="Delete Selected"
-                                    title="Delete Selected"
-                                    class="slds-m-left_xx-small"
-                                    onclick={handleBulkDelete}>
-                                </lightning-button-icon>
+                                <template if:true={userPermissions.isDeletable}>
+                                    <lightning-button-icon 
+                                        icon-name="utility:delete"
+                                        alternative-text="Delete Selected"
+                                        title="Delete Selected"
+                                        class="slds-m-left_xx-small"
+                                        onclick={handleBulkDelete}>
+                                    </lightning-button-icon>
+                                </template>
                             </template>
                 
                             <!-- Settings Menu -->
@@ -194,7 +224,7 @@
             <div class="slds-backdrop slds-backdrop_open"></div>
         </template>
 
-        <!-- 4.2 Edit Record Modal -->
+        <!-- Edit Record Modal -->
         <template if:true={showEditModal}>
             <section role="dialog" data-id="editModal" tabindex="-1" aria-labelledby="modal-heading-02" aria-modal="true" class="slds-modal slds-fade-in-open">
                 <div class="slds-modal__container">
@@ -205,6 +235,11 @@
                         <h2 id="modal-heading-02" class="slds-modal__title slds-hyphenate">Edit {childObjectLabel}</h2>
                     </header>
                     <div class="slds-modal__content slds-p-around_medium">
+                        <template if:true={permissionError}>
+                            <div class="permission-error slds-m-bottom_small">
+                                {permissionErrorMessage}
+                            </div>
+                        </template>
                         <lightning-record-edit-form
                             record-id={selectedRecordId}
                             object-api-name={childObjectApiName}
@@ -236,7 +271,8 @@
                                     variant="brand" 
                                     type="submit" 
                                     name="submit"
-                                    label="Save">
+                                    label="Save"
+                                    disabled={permissionError}>
                                 </lightning-button>
                             </div>
                         </lightning-record-edit-form>
@@ -246,7 +282,7 @@
             <div class="slds-backdrop slds-backdrop_open"></div>
         </template>
 
-        <!-- 4.3 Delete Confirmation Modal -->
+        <!-- Delete Confirmation Modal -->
         <template if:true={showDeleteModal}>
             <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-03" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
                 <div class="slds-modal__container">
@@ -257,20 +293,25 @@
                         <h2 id="modal-heading-03" class="slds-modal__title slds-hyphenate">Delete Record</h2>
                     </header>
                     <div class="slds-modal__content slds-p-around_medium">
+                        <template if:true={permissionError}>
+                            <div class="permission-error slds-m-bottom_small">
+                                {permissionErrorMessage}
+                            </div>
+                        </template>
                         <p class="slds-text-heading_small slds-text-align_center">
                             Are you sure you want to delete this record? This action cannot be undone.
                         </p>
                     </div>
                     <footer class="slds-modal__footer">
                         <lightning-button label="Cancel" onclick={handleCloseDeleteModal}></lightning-button>
-                        <lightning-button variant="destructive" label="Delete" onclick={handleConfirmDelete}></lightning-button>
+                        <lightning-button variant="destructive" label="Delete" onclick={handleConfirmDelete} disabled={permissionError}></lightning-button>
                     </footer>
                 </div>
             </section>
             <div class="slds-backdrop slds-backdrop_open"></div>
         </template>
 
-        <!-- 4.4 Bulk Delete Modal -->
+        <!-- Bulk Delete Modal -->
         <template if:true={showBulkDeleteModal}>
             <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-bulk-delete" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
                 <div class="slds-modal__container">
@@ -281,6 +322,11 @@
                         <h2 id="modal-heading-bulk-delete" class="slds-modal__title slds-hyphenate">Delete Selected Records</h2>
                     </header>
                     <div class="slds-modal__content slds-p-around_medium">
+                        <template if:true={permissionError}>
+                            <div class="permission-error slds-m-bottom_small">
+                                {permissionErrorMessage}
+                            </div>
+                        </template>
                         <p class="slds-text-heading_small slds-text-align_center">
                             Are you sure you want to delete {selectedRows.length} selected records? This action cannot be undone.
                         </p>
@@ -294,6 +340,7 @@
                             variant="destructive" 
                             label="Delete" 
                             onclick={handleConfirmBulkDelete}
+                            disabled={permissionError}
                             class="slds-m-left_x-small">
                         </lightning-button>
                     </footer>

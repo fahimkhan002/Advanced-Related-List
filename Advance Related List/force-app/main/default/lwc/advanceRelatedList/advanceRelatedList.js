@@ -6,12 +6,13 @@ import { encodeDefaultFieldValues } from 'lightning/pageReferenceUtils';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import USER_CURRENCY from '@salesforce/i18n/currency';
 import getRecords from '@salesforce/apex/RelatedListController.getRecords';
+import getUserPermissions from '@salesforce/apex/RelatedListController.getUserPermissions';
 import deleteRecord from '@salesforce/apex/RelatedListController.deleteRecord';
 
 // ===== IMPORTS AND CONSTANTS =====
 const FIXED_WIDTH = {
-    number: 60,
-    action: 80
+    number: 60,    // Width for row number column
+    action: 180    // Width for action column
 };
 
 const actions = [
@@ -71,6 +72,13 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     @track showBulkDeleteButton = false;
     @track preSelectedRows = [];
     @track userCurrency = USER_CURRENCY;
+    @track permissionError = false;
+    @track permissionErrorMessage = '';
+    @track userPermissions = {
+        isCreateable: false,
+        isUpdateable: false,
+        isDeletable: false
+    };
 
     //private properties
     searchTimeout;
@@ -114,6 +122,13 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         return this.flowName && this.flowName.trim().length > 0;
     }
 
+    get showFlowButton() {
+        // Only show flow button if:
+        // 1. Flow name is configured
+        // 2. User has update permission (since flows typically modify records)
+        return this.hasFlowName && this.userPermissions.isUpdateable;
+    }
+
     get editFormFields() {
         return this.editableFields?.map(field => field.fieldApiName) || [];
     }
@@ -131,6 +146,25 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             return Math.ceil(this.wiredRecordResult.data.totalRecords / this.recordsPerPage);
         }
         return 0;
+    }
+
+    getActions() {
+        let actions = [];
+        
+        // Always show View
+        actions.push({ label: 'View', name: 'view', iconName: 'utility:preview' });
+        
+        // Show Edit only if user has update permission
+        if (this.userPermissions.isUpdateable) {
+            actions.push({ label: 'Edit', name: 'edit', iconName: 'utility:edit' });
+        }
+        
+        // Show Delete only if user has delete permission
+        if (this.userPermissions.isDeletable) {
+            actions.push({ label: 'Delete', name: 'delete', iconName: 'utility:delete' });
+        }
+        
+        return actions;
     }
 
     //WIRE SERVICES
@@ -197,19 +231,31 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.isLoading = true;
         
         if (result.data) {
-            console.log('Received data:', {
-                totalRecords: result.data.totalRecords,
-                currentPage: this.pageNumber,
-                searchTerm: this.debouncedSearchTerm
-            });
-            
             this.processRecords(result.data);
             this.error = undefined;
+            this.permissionError = false;
+            this.permissionErrorMessage = '';
         } else if (result.error) {
-            this.handleError(result.error);
+            if (result.error.body && result.error.body.message && result.error.body.message.includes('Insufficient permissions')) {
+                this.permissionError = true;
+                this.permissionErrorMessage = result.error.body.message;
+            } else {
+                this.handleError(result.error);
+            }
         }
         
         this.isLoading = false;
+    }
+
+    @wire(getUserPermissions, { objectName: '$childObjectApiName' })
+    wiredPermissions({ error, data }) {
+        if (data) {
+            this.userPermissions = data;
+            // Update actions based on permissions
+            this.initializeColumns();
+        } else if (error) {
+            console.error('Error getting permissions:', error);
+        }
     }
 
        // LIFECYCLE HOOKS
@@ -481,34 +527,64 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
 
     // Delete Events
     handleConfirmDelete() {
-        console.log('Deleting record with ID:', this.selectedRecordId);
-        console.log('Object Name:', this.childObjectApiName);
-    
-        this.isLoading = true; // Show spinner during deletion
+        this.isLoading = true;
         deleteRecord({ 
             recordId: this.selectedRecordId, 
             objectName: this.childObjectApiName 
         })
             .then(() => {
-                console.log('Record deleted successfully');
                 this.showToast('Success', 'Record deleted successfully', 'success');
-                this.showDeleteModal = false; // Close modal
-                this.selectedRecordId = null; // Clear selected record
-                this.handleRefresh(); // Refresh the datatable
+                this.showDeleteModal = false;
+                this.selectedRecordId = null;
+                this.handleRefresh();
             })
             .catch(error => {
-                console.error('Error deleting record:', error);
-                this.showToast('Error', error.body?.message || 'Failed to delete record.', 'error');
-                this.showDeleteModal = false; // Ensure modal closes even if delete fails
+                // Check if it's a permissions error
+                if (error.body && error.body.message && error.body.message.includes('Insufficient permissions')) {
+                    this.permissionError = true;
+                    this.permissionErrorMessage = error.body.message;
+                } else {
+                    this.showToast('Error', error.body?.message || 'Failed to delete record.', 'error');
+                }
+                this.showDeleteModal = false;
             })
             .finally(() => {
-                this.isLoading = false; // Stop spinner
+                this.isLoading = false;
             });
     }
 
     async handleBulkDelete() {
-        if (this.selectedRows.length === 0) return;
-        this.showBulkDeleteModal = true;
+        try {
+            this.isLoading = true;
+            const recordIds = this.preSelectedRows;
+            
+            const deletePromises = recordIds.map(recordId => 
+                deleteRecord({ 
+                    recordId: recordId, 
+                    objectName: this.childObjectApiName 
+                })
+            );
+    
+            await Promise.all(deletePromises);
+            
+            this.showToast('Success', `${recordIds.length} records deleted successfully`, 'success');
+            
+            this.preSelectedRows = [];
+            this.selectedRows = [];
+            this.showBulkDeleteButton = false;
+            this.showBulkDeleteModal = false;
+            
+            this.handleRefresh();
+        } catch (error) {
+            if (error.body && error.body.message && error.body.message.includes('Insufficient permissions')) {
+                this.permissionError = true;
+                this.permissionErrorMessage = error.body.message;
+            } else {
+                this.showToast('Error', error.body?.message || 'Failed to delete records', 'error');
+            }
+        } finally {
+            this.isLoading = false;
+        }
     }
 
     async handleConfirmBulkDelete() {
@@ -548,21 +624,19 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
 
     // Form Events
     handleRecordSubmit(event) {
-        // Prevent the default form submission
         event.preventDefault();
         
         try {
-            // Show loading spinner
             this.isLoading = true;
-            
-            // Get the fields from the form
             const fields = event.detail.fields;
-            
-            // Submit the form
             this.template.querySelector('lightning-record-edit-form').submit(fields);
         } catch (error) {
-            console.error('Submit Error:', error);
-            this.showToast('Error', 'An error occurred while submitting the form: ' + (error.message || error.body?.message || 'Unknown error'), 'error');
+            if (error.body && error.body.message && error.body.message.includes('Insufficient permissions')) {
+                this.permissionError = true;
+                this.permissionErrorMessage = error.body.message;
+            } else {
+                this.showToast('Error', 'An error occurred while submitting the form: ' + (error.message || error.body?.message || 'Unknown error'), 'error');
+            }
         }
     }
     
@@ -714,7 +788,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     
         // Get container width
         const container = this.template.querySelector('.table-container');
-        const availableWidth = container ? container.offsetWidth : 1200;
+        const availableWidth = container ? container.offsetWidth : 1;
     
         if (columnCount <= 4) {
             // For 5 or fewer columns, calculate width to fit container
@@ -874,7 +948,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             // Action Column
             {
                 type: 'action',
-                typeAttributes: { rowActions: actions },
+                typeAttributes: { rowActions: this.getActions() },
                 fixedWidth: FIXED_WIDTH.action,
                 initialWidth: FIXED_WIDTH.action
             }
@@ -896,9 +970,9 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     }    
    
     processRecords(data) {
-        console.log('--- processRecords START ---');
+        
         if (!data || !data.records) {
-            console.log('No data or records found');
+            
             this.data = [];
             return;
         }
@@ -907,10 +981,6 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         const currencyFields = this.fieldsArray.filter(field => 
             this.objectInfo?.fields[field]?.dataType?.toLowerCase() === 'currency'
         );
-        
-        console.log('Dynamic Currency Fields Found:', currencyFields);
-        console.log('Fields to Display:', this.fieldsArray);
-        console.log('Sample Record Data:', data.records[0]);
     
         const startingNumber = (this.pageNumber - 1) * this.recordsPerPage + 1;
         
@@ -987,7 +1057,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 return acc;
             }, {})
         }));
-        console.log('Processed Records with Currency:', processedCurrencyFields);
+        
     
         this.filteredData = [...this.data];
     
@@ -997,7 +1067,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             this.selectedRows = this.filteredData.filter(row => selectedIds.has(row.Id));
         }
         this.totalPages = Math.ceil(data.totalRecords / this.recordsPerPage);
-        console.log('--- processRecords END ---');
+        
     }
 
     getSortValue(record, field) {
@@ -1137,6 +1207,11 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         }
         
         this.isLoading = false;
+    }
+
+    handleDismissPermissionError() {
+        this.permissionError = false;
+        this.permissionErrorMessage = '';
     }
 
 }

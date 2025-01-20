@@ -189,7 +189,7 @@ private class RelatedListControllerTest {
         
         Test.startTest();
         
-        RelatedListController.updateRecords(testContacts);
+        RelatedListController.updateRecords(testContacts, 'Contact');
         
         Test.stopTest();
         

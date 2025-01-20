@@ -1,5 +1,5 @@
 /**
- * @description Controller class for the Advanced Related List LWC component
+ * @description Controller class for the Advanced Related List LWC component with security checks
  * @author Your Name
  * @date 2025-01-15
  */
@@ -13,15 +13,103 @@ public with sharing class RelatedListController {
     public class RelatedListWrapper {
         @AuraEnabled public List<SObject> records;
         @AuraEnabled public Integer totalRecords;
-
-        /**
-         * @description Constructor to initialize the wrapper
-         * @param records List of records to display
-         * @param totalRecords Total count of records
-         */
+        
         public RelatedListWrapper(List<SObject> records, Integer totalRecords) {
             this.records = records;
             this.totalRecords = totalRecords;
+        }
+    }
+
+    /**
+     * @description Custom exception for security violations
+     */
+    public class SecurityException extends Exception {}
+    
+    // ===== SECURITY UTILITY METHODS =====
+    
+    /**
+     * @description Checks object-level CRUD permissions
+     * @param objectType The SObject type to check
+     * @param operation The CRUD operation to check (CREATE, READ, UPDATE, DELETE)
+     * @throws SecurityException if the user lacks required permissions
+     */
+    private static void checkObjectCRUD(String objectType, String operation) {
+        Schema.DescribeSObjectResult describe = Schema.getGlobalDescribe().get(objectType).getDescribe();
+        
+        Boolean hasPermission = false;
+        String errorMsg = '';
+        
+        switch on operation.toUpperCase() {
+            when 'CREATE' {
+                hasPermission = describe.isCreateable();
+                errorMsg = 'create';
+            }
+            when 'READ' {
+                hasPermission = describe.isAccessible();
+                errorMsg = 'read';
+            }
+            when 'UPDATE' {
+                hasPermission = describe.isUpdateable();
+                errorMsg = 'update';
+            }
+            when 'DELETE' {
+                hasPermission = describe.isDeletable();
+                errorMsg = 'delete';
+            }
+        }
+        
+        if (!hasPermission) {
+            throw new SecurityException('Insufficient permissions to ' + errorMsg + ' ' + objectType + ' records');
+        }
+    }
+    
+    /**
+     * @description Checks field-level security for a list of fields
+     * @param objectType The API name of the object
+     * @param fields List of field API names
+     * @param operation The operation to check (READ or EDIT)
+     * @throws SecurityException if the user lacks required permissions
+     */
+    private static void checkFieldSecurity(String objectType, List<String> fields, String operation) {
+        Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get(objectType).getDescribe().fields.getMap();
+        Set<String> processedFields = new Set<String>();
+        
+        for (String field : fields) {
+            // Handle relationship fields
+            if (field.contains('.')) {
+                String baseField = field.split('\\.')[0];
+                if (!processedFields.contains(baseField)) {
+                    processedFields.add(baseField);
+                    checkFieldAccess(fieldMap, baseField, operation);
+                }
+                continue;
+            }
+            
+            if (!processedFields.contains(field)) {
+                processedFields.add(field);
+                checkFieldAccess(fieldMap, field, operation);
+            }
+        }
+    }
+    
+    /**
+     * @description Checks access for a single field
+     * @param fieldMap Map of field descriptors
+     * @param fieldName Field API name
+     * @param operation Operation to check
+     * @throws SecurityException if the user lacks required permissions
+     */
+    private static void checkFieldAccess(Map<String, Schema.SObjectField> fieldMap, String fieldName, String operation) {
+        Schema.SObjectField field = fieldMap.get(fieldName);
+        if (field == null) return; // Skip non-existent fields
+        
+        Schema.DescribeFieldResult describe = field.getDescribe();
+        Boolean hasPermission = operation.toUpperCase() == 'READ' ? 
+            describe.isAccessible() : describe.isUpdateable();
+            
+        if (!hasPermission) {
+            throw new SecurityException('Insufficient permissions to ' + operation.toLowerCase() + 
+                                     ' field: ' + fieldName);
         }
     }
 
@@ -51,6 +139,15 @@ public with sharing class RelatedListController {
         List<String> searchableFields
     ) {
         try {
+            // Security checks
+            checkObjectCRUD(childObject, 'READ');
+            checkFieldSecurity(childObject, fields, 'READ');
+            
+            // Additional security check for searchable fields
+            if (!searchableFields.isEmpty()) {
+                checkFieldSecurity(childObject, searchableFields, 'READ');
+            }
+
             // Validate inputs
             validateInputs(childObject, parentLookupField, parentId, fields);
 
@@ -79,9 +176,11 @@ public with sharing class RelatedListController {
 
             return new RelatedListWrapper(records, totalRecords);
 
+        } catch (SecurityException e) {
+            throw new AuraHandledException(e.getMessage());
         } catch (Exception e) {
             handleException(e);
-            return null; // This line will never execute due to exception handling
+            return null;
         }
     }
 
@@ -93,20 +192,24 @@ public with sharing class RelatedListController {
     @AuraEnabled
     public static void deleteRecord(String recordId, String objectName) {
         try {
+            // Security check
+            checkObjectCRUD(objectName, 'DELETE');
+            
             // Validate inputs
             if (String.isBlank(recordId)) {
                 throw new AuraHandledException('Record ID cannot be blank.');
             }
 
-            // Build and execute query
+            // Query the record first to ensure it exists and user has access
             String query = 'SELECT Id FROM ' + String.escapeSingleQuotes(objectName) +
                          ' WHERE Id = \'' + String.escapeSingleQuotes(recordId) + '\' LIMIT 1';
             
-            SObject record = Database.query(query);
-
-            if (record != null) {
-                delete record;
+            List<SObject> records = Database.query(query);
+            if (!records.isEmpty()) {
+                delete records[0];
             }
+        } catch (SecurityException e) {
+            throw new AuraHandledException(e.getMessage());
         } catch (Exception e) {
             handleException(e);
         }
@@ -115,25 +218,46 @@ public with sharing class RelatedListController {
     /**
      * @description Updates a list of records
      * @param records List of records to update
+     * @param objectName API name of the object
      */
     @AuraEnabled
-    public static void updateRecords(List<SObject> records) {
+    public static void updateRecords(List<SObject> records, String objectName) {
         try {
+            if (records == null || records.isEmpty()) {
+                throw new AuraHandledException('No records provided for update.');
+            }
+
+            // Security checks
+            checkObjectCRUD(objectName, 'UPDATE');
+            
+            // Get fields being updated
+            Map<String, Object> fieldValues = records[0].getPopulatedFieldsAsMap();
+            checkFieldSecurity(objectName, new List<String>(fieldValues.keySet()), 'EDIT');
+
             update records;
+        } catch (SecurityException e) {
+            throw new AuraHandledException(e.getMessage());
         } catch (Exception e) {
             handleException(e);
         }
     }
 
+            @AuraEnabled(cacheable=true)
+        public static Map<String, Boolean> getUserPermissions(String objectName) {
+            try {
+                Schema.DescribeSObjectResult describe = Schema.getGlobalDescribe().get(objectName).getDescribe();
+                return new Map<String, Boolean>{
+                    'isCreateable' => describe.isCreateable(),
+                    'isUpdateable' => describe.isUpdateable(),
+                    'isDeletable' => describe.isDeletable()
+                };
+            } catch (Exception e) {
+                throw new AuraHandledException(e.getMessage());
+            }
+        }
+
     // ===== PRIVATE HELPER METHODS =====
 
-    /**
-     * @description Validates input parameters
-     * @param childObject Child object API name
-     * @param parentLookupField Parent lookup field name
-     * @param parentId Parent record Id
-     * @param fields List of fields to query
-     */
     private static void validateInputs(
         String childObject,
         String parentLookupField,
@@ -154,29 +278,12 @@ public with sharing class RelatedListController {
         }
     }
 
-    /**
-     * @description Builds the set of fields to query
-     * @param fields List of fields from the component
-     * @return Set<String> Set of fields to query
-     */
     private static Set<String> buildQueryFields(List<String> fields) {
-        Set<String> queryFields = new Set<String>{'Id', 'Name'};
-        
-        for(String field : fields) {
-            queryFields.add(field);
-        }
-        
+        Set<String> queryFields = new Set<String>{'Id'};
+        queryFields.addAll(fields);
         return queryFields;
     }
 
-    /**
-     * @description Builds the WHERE clause for the query
-     * @param parentLookupField Parent lookup field name
-     * @param parentId Parent record Id
-     * @param searchTerm Search string
-     * @param searchableFields List of searchable fields
-     * @return String WHERE clause
-     */
     private static String buildWhereClause(
         String parentLookupField,
         String parentId,
@@ -188,12 +295,10 @@ public with sharing class RelatedListController {
 
         if (String.isNotBlank(searchTerm) && searchableFields != null && !searchableFields.isEmpty()) {
             List<String> searchConditions = new List<String>();
-            // Create the search value with escaped special characters
             String searchValue = '%' + String.escapeSingleQuotes(searchTerm) + '%';
             
             for (String field : searchableFields) {
-                // Instead of using bind variable, directly include the search value
-                searchConditions.add(field + ' LIKE \'' + searchValue + '\'');
+                searchConditions.add(String.escapeSingleQuotes(field) + ' LIKE \'' + searchValue + '\'');
             }
             
             if (!searchConditions.isEmpty()) {
@@ -204,12 +309,6 @@ public with sharing class RelatedListController {
         return whereClause;
     }
 
-    /**
-     * @description Gets the total count of records matching the criteria
-     * @param childObject Child object API name
-     * @param whereClause WHERE clause for the query
-     * @return Integer Total number of records
-     */
     private static Integer getTotalRecords(String childObject, String whereClause) {
         return Database.countQuery(
             'SELECT COUNT() FROM ' + String.escapeSingleQuotes(childObject) + 
@@ -217,15 +316,6 @@ public with sharing class RelatedListController {
         );
     }
 
-    /**
-     * @description Executes the main query to get records
-     * @param childObject Child object API name
-     * @param queryFields Set of fields to query
-     * @param whereClause WHERE clause
-     * @param pageSize Number of records per page
-     * @param pageNumber Current page number
-     * @return List<SObject> List of records
-     */
     private static List<SObject> executeMainQuery(
         String childObject,
         Set<String> queryFields,
@@ -238,20 +328,16 @@ public with sharing class RelatedListController {
         String query = 'SELECT ' + String.join(new List<String>(queryFields), ',') + 
                       ' FROM ' + String.escapeSingleQuotes(childObject) + 
                       ' WHERE ' + whereClause + 
-                      ' ORDER BY CreatedDate ASC' +
+                      ' ORDER BY CreatedDate DESC' +
                       ' LIMIT :pageSize OFFSET :offset';
 
         return Database.query(query);
     }
 
-    /**
-     * @description Handles exceptions by wrapping them in AuraHandledException
-     * @param e Exception to handle
-     */
     private static void handleException(Exception e) {
         String errorMessage = 'Error: ' + e.getMessage();
-        System.debug('Error: ' + e.getMessage());
-        System.debug('Stack trace: ' + e.getStackTraceString());
+        System.debug(LoggingLevel.ERROR, 'Error: ' + e.getMessage());
+        System.debug(LoggingLevel.ERROR, 'Stack trace: ' + e.getStackTraceString());
         throw new AuraHandledException(errorMessage);
     }
 }

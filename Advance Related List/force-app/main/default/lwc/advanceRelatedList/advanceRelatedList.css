@@ -179,3 +179,15 @@ lightning-datatable {
 .THIS tr th:first-child{
     display:none;
 }
+
+.slds-notify_alert {
+    margin-bottom: 1rem;
+}
+
+.permission-error {
+    background-color: rgb(254, 92, 76);
+    color: white;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+    border-radius: 0.25rem;
+}

@@ -1,122 +1,173 @@
-# Salesforce LWC Related List Component
+# Advanced Salesforce LWC Related List Component
 
-A highly customizable Lightning Web Component (LWC) that provides enhanced related list functionality for Salesforce with features like server-side pagination, dynamic sorting, global search, and relationship field support.
+A highly customizable Lightning Web Component (LWC) that provides enhanced related list functionality for Salesforce. This component combines powerful features like server-side pagination, dynamic sorting, global search, and comprehensive field type support.
 
-## Features
+## 🚀 Features
 
-- **Server-side Pagination**: Efficiently handle large datasets with configurable page sizes
+### Core Features
+- **Server-side Pagination**: Efficiently handle large datasets
 - **Dynamic Sorting**: Sort any column including relationship fields
-- **Global Search**: Search across all records (not just the current page) including relationship fields
+- **Global Search**: Search across all records and relationship fields
 - **Responsive Design**: Adapts to different screen sizes
-- **Custom Icons**: Support for custom icons with configurable background colors
-- **Flow Integration**: Launch flows directly from the related list
-- **CRUD Operations**: 
-  - Create new records
-  - Edit existing records
-  - Delete records with confirmation
-- **Toast Notifications**: User-friendly feedback messages
-- **Loading States**: Visual feedback during data operations
+- **CRUD Operations**: Full create, read, update, delete support
 
-## Component Properties
+### Advanced Features
+- **Field Type Support**:
+  - 📧 Email fields with click-to-email
+  - 📞 Phone fields with click-to-call
+  - 💰 Currency fields with proper formatting
+  - 📅 Date/Time with locale support
+  - 🔗 Lookup fields with navigation
+  - ✅ Boolean fields
+  - 📊 Number and percent fields
+  - 📝 Rich text support
 
-| Property Name | Type | Required | Description | Example |
-|--------------|------|----------|-------------|---------|
-| childObjectApiName | String | Yes | API name of the child object | `'Hospital_Affiliation__c'` |
-| parentLookupField | String | Yes | API name of the lookup field in child object | `'Provider__c'` |
-| fieldsToDisplay | String | Yes | Comma-separated list of field API names | `'Name,Status__c'` |
-| columnLabels | String | No | Custom labels for columns | `'Name,Status'` |
-| searchableFields | String | Yes | Fields to enable in search | `'Name,Status__c'` |
-| recordsPerPage | Integer | No | Number of records per page (default: 10) | `20` |
-| flowName | String | No | API name of the flow to launch | `'Update_Status'` |
-| flowTitle | String | No | Title for the flow modal | `'Update Status'` |
-| listTitle | String | No | Custom title for the related list | `'Hospital Affiliations'` |
-| customIconName | String | No | SLDS icon name | `'standard:account'` |
-| iconBackgroundColor | String | No | Background color for icon | `'#f4b400'` |
+### User Experience
+- **Column Management**: 
+  - Resizable columns
+  - Custom column labels
+  - Reset to default widths
+- **Interactive Elements**:
+  - Loading states
+  - Toast notifications
+  - Confirmation dialogs
+- **Flow Integration**: Launch flows from the related list
+- **Bulk Operations**: Select and delete multiple records
 
-## Installation
+## 📋 Component Properties
 
-1. Deploy the following components to your Salesforce org:
-   - `RelatedList` LWC component
-   - `RelatedListController` Apex class
+| Property Name | Type | Required | Description | Default | Example |
+|--------------|------|----------|-------------|---------|---------|
+| childObjectApiName | String | Yes | Child object API name | - | `'Contact'` |
+| parentLookupField | String | Yes | Lookup field API name | - | `'AccountId'` |
+| fieldsToDisplay | String | Yes | Fields to show | - | `'Name,Email,Phone'` |
+| columnLabels | String | No | Custom column labels | Field labels | `'Name,Email,Phone'` |
+| searchableFields | String | Yes | Searchable fields | - | `'Name,Email'` |
+| sortableFields | String | No | Sortable fields | All fields | `'Name,CreatedDate'` |
+| recordsPerPage | Integer | No | Records per page | 10 | `20` |
+| flowName | String | No | Flow API name | - | `'Update_Contact'` |
+| flowTitle | String | No | Flow modal title | 'Run Flow' | `'Update Contact'` |
+| listTitle | String | No | List title | Object label | `'Contacts'` |
+| customIconName | String | No | SLDS icon name | 'standard:custom' | `'standard:contact'` |
+| iconBackgroundColor | String | No | Icon background color | '#f4b400' | `'#1589EE'` |
 
-2. Add the component to your Lightning page using the Lightning App Builder:
-   ```html
-   <c-related-list
-       child-object-api-name="Hospital_Affiliation__c"
-       parent-lookup-field="Provider__c"
-       fields-to-display="Name,Credentialing_Entity__r.Name,Status__c"
-       searchable-fields="Name,Credentialing_Entity__r.Name,Status__c"
-       records-per-page="20"
-       list-title="Hospital Affiliations">
-   </c-related-list>
-   ```
+## 🛠️ Installation
 
-## Usage Example
+1. Deploy these components to your org:
+```bash
+force-app/main/default/
+├── classes/
+│   ├── RelatedListController.cls
+│   └── RelatedListControllerTest.cls
+└── lwc/
+    └── advanceRelatedList/
+        ├── advanceRelatedList.js
+        ├── advanceRelatedList.html
+        ├── advanceRelatedList.css
+        └── advanceRelatedList.js-meta.xml
+```
+
+2. Assign appropriate permissions to profiles that need access.
+
+## 📝 Usage Examples
 
 ### Basic Implementation
 ```html
-<c-related-list
-    child-object-api-name="Hospital_Affiliation__c"
-    parent-lookup-field="Provider__c"
-    fields-to-display="Name,Status__c"
-    searchable-fields="Name,Status__c">
-</c-related-list>
+<c-advance-related-list
+    child-object-api-name="Contact"
+    parent-lookup-field="AccountId"
+    fields-to-display="Name,Email,Phone"
+    searchable-fields="Name,Email">
+</c-advance-related-list>
 ```
 
-### Advanced Implementation with Flow
+### Advanced Implementation
 ```html
-<c-related-list
-    child-object-api-name="Hospital_Affiliation__c"
-    parent-lookup-field="Provider__c"
-    fields-to-display="Name,Credentialing_Entity__r.Name,Status__c"
-    searchable-fields="Name,Credentialing_Entity__r.Name,Status__c"
-    records-per-page="20"
-    flow-name="Update_Hospital_Status"
-    flow-title="Update Status"
-    list-title="Hospital Affiliations"
-    custom-icon-name="standard:hospital"
+<c-advance-related-list
+    child-object-api-name="Contact"
+    parent-lookup-field="AccountId"
+    fields-to-display="Name,Email,Phone,Title,Account.Name,CreatedDate"
+    searchable-fields="Name,Email,Title,Account.Name"
+    sortable-fields="Name,CreatedDate"
+    column-labels="Full Name,Email,Phone,Title,Account,Created"
+    records-per-page="15"
+    flow-name="Contact_Update_Flow"
+    flow-title="Update Contact"
+    list-title="Customer Contacts"
+    custom-icon-name="standard:contact"
     icon-background-color="#1589EE">
-</c-related-list>
+</c-advance-related-list>
 ```
 
-## Component Structure
-
-```
-force-app/main/default/
-├── classes/
-│   └── RelatedListController.cls
-└── lwc/
-    └── relatedList/
-        ├── relatedList.js
-        ├── relatedList.html
-        └── relatedList.js-meta.xml
-```
-
-## Key Features Explained
+## 🎯 Key Features Explained
 
 ### Server-side Pagination
-The component uses server-side pagination to efficiently handle large datasets. The page size is configurable through the `recordsPerPage` property.
+- Efficient handling of large datasets
+- Configurable page sizes
+- Maintains state during operations
 
 ### Global Search
-Search functionality works across the entire dataset, not just the current page. It supports both regular and relationship fields.
+- Searches entire dataset, not just current page
+- Supports relationship fields
+- Real-time search with debouncing
+- Case-insensitive matching
 
-### Relationship Fields
-The component properly handles relationship fields for both display and search operations. For example, `Credentialing_Entity__r.Name` will work in both display and search contexts.
+### Field Type Support
+- Automatic handling of different field types
+- Clickable emails and phone numbers
+- Proper formatting for numbers and currencies
+- Date/time localization
+- Relationship field navigation
 
-### Dynamic Sorting
-All displayed fields can be sorted, including relationship fields. The sorting is maintained during pagination and search operations.
+## 💡 Best Practices
 
-## Best Practices
+1. **Performance Optimization**
+   - Include only necessary fields
+   - Set appropriate page sizes
+   - Index searchable fields
 
-1. **Field Selection**: Only include necessary fields in `fieldsToDisplay` to optimize performance
-2. **Search Fields**: Choose searchable fields carefully to maintain performance
-3. **Page Size**: Consider data volume when setting `recordsPerPage`
-4. **Error Handling**: The component includes built-in error handling with user-friendly messages
+2. **Search Configuration**
+   - Choose searchable fields strategically
+   - Consider performance impact
+   - Test with large datasets
 
-## Contributing
+3. **Mobile Considerations**
+   - Test on mobile devices
+   - Limit columns for mobile
+   - Consider field types for mobile use
 
-Feel free to submit issues and enhancement requests!
+4. **Error Handling**
+   - Monitor performance
+   - Handle null values
+   - Implement proper error catching
 
-## License
+## ⚠️ Limitations
 
-[MIT License](LICENSE)
+- Maximum 100 records for bulk selection
+- Rich text shown as plain text in table
+- Some field types have limited mobile functionality
+
+## 🧪 Testing
+
+Run the included test class:
+```bash
+sfdx force:apex:test:run -n "RelatedListControllerTest" -r human
+```
+
+## 🤝 Contributing
+
+Pull requests welcome! For major changes, please open an issue first.
+
+## 📄 License
+
+[MIT](https://choosealicense.com/licenses/mit/)
+
+## 💬 Support
+
+For issues, feature requests, or support:
+1. Check existing issues
+2. Open a new issue with:
+   - Clear description
+   - Steps to reproduce
+   - Expected behavior
+   - Screenshots if applicable

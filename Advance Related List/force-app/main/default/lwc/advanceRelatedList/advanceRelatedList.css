@@ -49,6 +49,8 @@
 
 .table-container.light-columns lightning-datatable {
     width: 100% !important;
+    --lwc-colorBackgroundRowSelected: rgb(236, 235, 234);
+    --lwc-colorBackgroundRowHover: rgb(243, 242, 242);
 }
 
 .table-container.heavy-columns {
@@ -152,4 +154,40 @@ lightning-datatable {
 
 .slds-resizable {
     padding: 0;
+}
+
+.slds-button-group {
+    display: flex;
+    align-items: center;
+}
+
+.slds-button-group lightning-button-icon {
+    margin-left: 0.25rem;
+}
+
+.slds-cell-edit {
+    background-color: #fafaf9;
+}
+
+.hideFirstColTable table th:first-child, .hideFirstColTable table td:first-child{
+    display: none !important;
+}
+
+.THIS tr td:first-child{
+    display:none;
+}
+.THIS tr th:first-child{
+    display:none;
+}
+
+.slds-notify_alert {
+    margin-bottom: 1rem;
+}
+
+.permission-error {
+    background-color: rgb(254, 92, 76);
+    color: white;
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+    border-radius: 0.25rem;
 }

@@ -1,12 +1,38 @@
+<!-- Template structure for Advanced Related List Component -->
 <template>
     <div class="slds-card">
-        <!-- Header Section -->
+        
+                <!-- Permission Error Alert -->
+                <template if:true={permissionError}>
+                    <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
+                        <span class="slds-assistive-text">error</span>
+                        <span class="slds-icon_container slds-icon-utility-error slds-m-right_x-small">
+                            <lightning-icon icon-name="utility:error"
+                                          alternative-text="Error"
+                                          size="x-small"
+                                          variant="inverse">
+                            </lightning-icon>
+                        </span>
+                        <h2>{permissionErrorMessage}</h2>
+                        <div class="slds-notify__close">
+                            <lightning-button-icon
+                                icon-name="utility:close"
+                                size="small"
+                                variant="bare-inverse"
+                                onclick={handleDismissPermissionError}
+                                alternative-text="Close">
+                            </lightning-button-icon>
+                        </div>
+                    </div>
+                </template>
+        
+        <!-- 1. Header Section -->
+
         <div class="slds-card__header">
             <div class="slds-grid slds-grid_vertical-align-center slds-grid_align-spread">
-                <!-- Title and Icon Section -->
+                <!-- 1.1 Title and Icon Section -->
                 <div class="slds-col">
                     <div class="slds-media slds-media_center">
-                        <!-- Custom Icon Display -->
                         <template if:true={hasIcon}>
                             <div class="slds-icon_container slds-m-right_small">
                                 <lightning-icon 
@@ -21,9 +47,8 @@
                         </div>
                     </div>
                 </div>
-                
 
-                <!-- Search and Actions Section -->
+                <!-- 1.2 Search and Actions Section -->
                 <div class="slds-col slds-grid slds-grid_align-end">
                     <div class="slds-grid slds-grid_vertical-align-start">
                         <!-- Search Input -->
@@ -40,7 +65,7 @@
                         <!-- Action Buttons -->
                         <div class="slds-button-group">
                             <!-- Flow Button -->
-                            <template if:true={hasFlowName}>
+                            <template if:true={showFlowButton}>
                                 <lightning-button-icon 
                                     icon-name="utility:flow"
                                     alternative-text="Run Flow"
@@ -60,15 +85,30 @@
                             </lightning-button-icon>
                 
                             <!-- New Record Button -->
-                            <lightning-button-icon 
-                                icon-name="utility:new"
-                                alternative-text="New"
-                                title="New"
-                                class="slds-m-left_xx-small"
-                                onclick={handleNewRecord}>
-                            </lightning-button-icon>
+                            <template if:true={userPermissions.isCreateable}>
+                                <lightning-button-icon 
+                                    icon-name="utility:new"
+                                    alternative-text="New"
+                                    title="New"
+                                    class="slds-m-left_xx-small"
+                                    onclick={handleNewRecord}>
+                                </lightning-button-icon>
+                            </template>
+                            
+                            <!-- Bulk Delete Button -->
+                            <template if:true={showBulkDeleteButton}>
+                                <template if:true={userPermissions.isDeletable}>
+                                    <lightning-button-icon 
+                                        icon-name="utility:delete"
+                                        alternative-text="Delete Selected"
+                                        title="Delete Selected"
+                                        class="slds-m-left_xx-small"
+                                        onclick={handleBulkDelete}>
+                                    </lightning-button-icon>
+                                </template>
+                            </template>
                 
-                            <!-- Settings Button and Menu -->
+                            <!-- Settings Menu -->
                             <div class="slds-dropdown-trigger slds-dropdown-trigger_click" style="position: relative;">
                                 <lightning-button-icon 
                                     class="settings-button slds-m-left_xx-small"
@@ -100,134 +140,21 @@
             </div>
         </div>
 
-        <!-- Error Alert -->
+        <!-- 2. Error Alert Section -->
         <template if:true={error}>
             <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error">
                 {error.body.message}
             </div>
         </template>
 
-        <!-- Main Content Body -->
+        <!-- 3. Main Content Body -->
         <div class="slds-card__body">
-            <!-- Flow Modal -->
-            <template if:true={showFlowModal}>
-                <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open slds-modal_large">
-                    <div class="slds-modal__container" style="width: 90%; max-width: 70rem;">
-                        <header class="slds-modal__header">
-                            <!-- Replace your existing close button with this one -->
-                            <button 
-                                class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" 
-                                title="Close" 
-                                onclick={handleCloseModal}>
-                                <lightning-icon 
-                                    icon-name="utility:close"
-                                    alternative-text="close"
-                                    variant="inverse"
-                                    size="small">
-                                </lightning-icon>
-                                <span class="slds-assistive-text">Close</span>
-                            </button>
-                            <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">
-                                {flowTitle}
-                            </h2>
-                        </header>
-                        <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1" style="min-height: 50vh;">
-                            <lightning-flow
-                                key={flowKey}
-                                flow-api-name={flowName}
-                                flow-input-variables={flowInputVariables}
-                                onstatuschange={handleFlowStatusChange}>
-                            </lightning-flow>
-                        </div>
-                    </div>
-                </section>
-                <div class="slds-backdrop slds-backdrop_open"></div>
-            </template>
-            <!-- Edit Record Modal -->
-            <template if:true={showEditModal}>
-                <section role="dialog" data-id="editModal" tabindex="-1" aria-labelledby="modal-heading-02" aria-modal="true" class="slds-modal slds-fade-in-open">
-                    <div class="slds-modal__container">
-                        <header class="slds-modal__header">
-                            <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseEditModal}>
-                                <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
-                            </button>
-                            <h2 id="modal-heading-02" class="slds-modal__title slds-hyphenate">Edit {childObjectLabel}</h2>
-                        </header>
-                        <div class="slds-modal__content slds-p-around_medium">
-                            <lightning-record-edit-form
-                                record-id={selectedRecordId}
-                                object-api-name={childObjectApiName}
-                                onsubmit={handleRecordSubmit}
-                                onsuccess={handleRecordSuccess}
-                                onerror={handleRecordError}>
-                                
-                                <lightning-messages></lightning-messages>
-                                
-                                <div class="slds-grid slds-wrap slds-gutters">
-                                    <template for:each={editFormFields} for:item="fieldName">
-                                        <div key={fieldName} class="slds-col slds-size_1-of-2 slds-p-around_xx-small">
-                                            <lightning-input-field 
-                                                field-name={fieldName}
-                                                required={isFieldRequired}
-                                                variant="label-stacked">
-                                            </lightning-input-field>
-                                        </div>
-                                    </template>
-                                </div>
-                                
-                                <div class="slds-m-top_medium slds-text-align_right">
-                                    <lightning-button 
-                                        label="Cancel" 
-                                        onclick={handleCloseEditModal} 
-                                        class="slds-m-right_x-small">
-                                    </lightning-button>
-                                    <lightning-button 
-                                        variant="brand" 
-                                        type="submit" 
-                                        name="submit"
-                                        label="Save">
-                                    </lightning-button>
-                                </div>
-                            </lightning-record-edit-form>
-                        </div>
-                    </div>
-                </section>
-                <div class="slds-backdrop slds-backdrop_open"></div>
-            </template>
-
-            <!-- Delete Confirmation Modal -->
-            <template if:true={showDeleteModal}>
-                <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-03" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
-                    <div class="slds-modal__container">
-                        <header class="slds-modal__header slds-theme_alert-texture slds-theme_error">
-                            <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseDeleteModal}>
-                                <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
-                            </button>
-                            <h2 id="modal-heading-03" class="slds-modal__title slds-hyphenate">
-                                Delete Record
-                            </h2>
-                        </header>
-                        <div class="slds-modal__content slds-p-around_medium">
-                            <p class="slds-text-heading_small slds-text-align_center">
-                                Are you sure you want to delete this record? This action cannot be undone.
-                            </p>
-                        </div>
-                        <footer class="slds-modal__footer">
-                            <lightning-button label="Cancel" onclick={handleCloseDeleteModal}></lightning-button>
-                            <lightning-button variant="destructive" label="Delete" onclick={handleConfirmDelete}></lightning-button>
-                        </footer>
-                    </div>
-                </section>
-                <div class="slds-backdrop slds-backdrop_open"></div>
-            </template>
-            
-            <!-- Loading Spinner -->
+            <!-- 3.1 Loading Spinner -->
             <template if:true={isLoading}>
                 <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
             </template>
 
-        <!-- Data Table Section -->
-        <div class="slds-card__body">
+            <!-- 3.2 Data Table -->
             <div class="table-container">
                 <lightning-datatable
                     key-field="Id"
@@ -238,16 +165,16 @@
                     sorted-direction={sortedDirection}
                     onrowselection={handleRowSelection}
                     onrowaction={handleRowAction}
-                    hide-checkbox-column="true"
+                    selected-rows={preSelectedRows}
                     resize-column-to-fit
                     oncolumnresize={handleColumnResize}
                     suppress-bottom-bar
+                    max-row-selection={maxRowSelection}
                     enable-safe-html>
                 </lightning-datatable>
             </div>
-        </div>
-            
-            <!-- Updated Pagination -->
+
+            <!-- 3.3 Pagination -->
             <div class="slds-grid slds-grid_align-center slds-m-top_small">
                 <div class="slds-button-group">
                     <lightning-button
@@ -269,5 +196,157 @@
                 </div>
             </div>
         </div>
+
+        <!-- 4. Modal Sections -->
+        <!-- 4.1 Flow Modal -->
+        <template if:true={showFlowModal}>
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open slds-modal_large">
+                <div class="slds-modal__container" style="width: 90%; max-width: 70rem;">
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={handleCloseModal}>
+                            <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
+                            <span class="slds-assistive-text">Close</span>
+                        </button>
+                        <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">
+                            {flowTitle}
+                        </h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1" style="min-height: 50vh;">
+                        <lightning-flow
+                            key={flowKey}
+                            flow-api-name={flowName}
+                            flow-input-variables={flowInputVariables}
+                            onstatuschange={handleFlowStatusChange}>
+                        </lightning-flow>
+                    </div>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Edit Record Modal -->
+        <template if:true={showEditModal}>
+            <section role="dialog" data-id="editModal" tabindex="-1" aria-labelledby="modal-heading-02" aria-modal="true" class="slds-modal slds-fade-in-open">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseEditModal}>
+                            <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
+                        </button>
+                        <h2 id="modal-heading-02" class="slds-modal__title slds-hyphenate">Edit {childObjectLabel}</h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <template if:true={permissionError}>
+                            <div class="permission-error slds-m-bottom_small">
+                                {permissionErrorMessage}
+                            </div>
+                        </template>
+                        <lightning-record-edit-form
+                            record-id={selectedRecordId}
+                            object-api-name={childObjectApiName}
+                            onsubmit={handleRecordSubmit}
+                            onsuccess={handleRecordSuccess}
+                            onerror={handleRecordError}>
+                            
+                            <lightning-messages></lightning-messages>
+                            
+                            <div class="slds-grid slds-wrap slds-gutters">
+                                <template for:each={editFormFields} for:item="fieldName">
+                                    <div key={fieldName} class="slds-col slds-size_1-of-2 slds-p-around_xx-small">
+                                        <lightning-input-field 
+                                            field-name={fieldName}
+                                            required={isFieldRequired}
+                                            variant="label-stacked">
+                                        </lightning-input-field>
+                                    </div>
+                                </template>
+                            </div>
+                            
+                            <div class="slds-m-top_medium slds-text-align_right">
+                                <lightning-button 
+                                    label="Cancel" 
+                                    onclick={handleCloseEditModal} 
+                                    class="slds-m-right_x-small">
+                                </lightning-button>
+                                <lightning-button 
+                                    variant="brand" 
+                                    type="submit" 
+                                    name="submit"
+                                    label="Save"
+                                    disabled={permissionError}>
+                                </lightning-button>
+                            </div>
+                        </lightning-record-edit-form>
+                    </div>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Delete Confirmation Modal -->
+        <template if:true={showDeleteModal}>
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-03" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header slds-theme_alert-texture slds-theme_error">
+                        <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseDeleteModal}>
+                            <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
+                        </button>
+                        <h2 id="modal-heading-03" class="slds-modal__title slds-hyphenate">Delete Record</h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <template if:true={permissionError}>
+                            <div class="permission-error slds-m-bottom_small">
+                                {permissionErrorMessage}
+                            </div>
+                        </template>
+                        <p class="slds-text-heading_small slds-text-align_center">
+                            Are you sure you want to delete this record? This action cannot be undone.
+                        </p>
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <lightning-button label="Cancel" onclick={handleCloseDeleteModal}></lightning-button>
+                        <lightning-button variant="destructive" label="Delete" onclick={handleConfirmDelete} disabled={permissionError}></lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
+        <!-- Bulk Delete Modal -->
+        <template if:true={showBulkDeleteModal}>
+            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-bulk-delete" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header slds-theme_alert-texture slds-theme_error">
+                        <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseBulkDeleteModal}>
+                            <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
+                        </button>
+                        <h2 id="modal-heading-bulk-delete" class="slds-modal__title slds-hyphenate">Delete Selected Records</h2>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <template if:true={permissionError}>
+                            <div class="permission-error slds-m-bottom_small">
+                                {permissionErrorMessage}
+                            </div>
+                        </template>
+                        <p class="slds-text-heading_small slds-text-align_center">
+                            Are you sure you want to delete {selectedRows.length} selected records? This action cannot be undone.
+                        </p>
+                    </div>
+                    <footer class="slds-modal__footer">
+                        <lightning-button 
+                            label="Cancel" 
+                            onclick={handleCloseBulkDeleteModal}>
+                        </lightning-button>
+                        <lightning-button 
+                            variant="destructive" 
+                            label="Delete" 
+                            onclick={handleConfirmBulkDelete}
+                            disabled={permissionError}
+                            class="slds-m-left_x-small">
+                        </lightning-button>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
     </div>
 </template>

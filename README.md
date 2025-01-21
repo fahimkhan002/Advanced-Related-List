@@ -38,7 +38,6 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 - 🔒 Built-in security checks and permissions handling
 - ↔️ Resizable columns
 - 🔄 Flow integration
-- 📝 Inline editing support
 
 ## Component Configuration
 

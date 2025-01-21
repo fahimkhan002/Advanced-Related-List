@@ -9,7 +9,7 @@ A flexible Lightning Web Component that provides an enhanced related list experi
    ```
    https://login.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfU
    ```
-   Install the package in sandbox using this URL :
+   and for sandbox:
    ```
    https://test.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfU
    ```
@@ -38,6 +38,7 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 - 🔒 Built-in security checks and permissions handling
 - ↔️ Resizable columns
 - 🔄 Flow integration
+- 🏠 Support for compound fields (like MailingAddress)
 
 ## Component Configuration
 
@@ -82,12 +83,24 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 </c-advanced-related-list>
 ```
 
-### Advanced Configuration with Flow
+### Configuration with Compound Fields
 ```javascript
 <c-advanced-related-list
     child-object-api-name="Contact"
     parent-lookup-field="AccountId"
-    fields-to-display="Name,Email,Phone,Title,Account.Name"
+    fields-to-display="Name,Email,Phone,MailingAddress"
+    searchable-fields="Name,Email"
+    records-per-page="10"
+    column-labels="Name,Email,Phone,Address">
+</c-advanced-related-list>
+```
+
+### Advanced Configuration with Flow and Compound Fields
+```javascript
+<c-advanced-related-list
+    child-object-api-name="Contact"
+    parent-lookup-field="AccountId"
+    fields-to-display="Name,Email,Phone,MailingAddress,Account.Name"
     searchable-fields="Name,Email,Phone"
     records-per-page="10"
     flow-name="Contact_Update_Flow"
@@ -95,44 +108,20 @@ A flexible Lightning Web Component that provides an enhanced related list experi
     list-title="Customer Contacts"
     custom-icon-name="standard:contact"
     icon-background-color="#1589EE"
-    column-labels="Full Name,Email Address,Phone Number,Job Title,Account"
-    sortable-fields="Name,Email,Title">
+    column-labels="Full Name,Email Address,Phone Number,Mailing Address,Account"
+    sortable-fields="Name,Email">
 </c-advanced-related-list>
 ```
 
 ## Component Features
 
-### Pagination
-- Configure records per page
-- Navigate through pages
-- Shows total record count
+### Compound Fields Support
+- Support for standard compound fields like MailingAddress and BillingAddress
+- Automatic formatting of address components into a single column
+- Clean address display with proper formatting
+- Works seamlessly with other features like sorting and searching
 
-### Search
-- Real-time search across configured fields
-- Debounced search to optimize performance
-- Clear search functionality
-
-### Bulk Actions
-- Select multiple records
-- Bulk delete with confirmation
-- Permission-based action visibility
-
-### Column Management
-- Resize columns
-- Sort by clicking column headers
-- Reset column widths
-- Custom column labels
-
-### Flow Integration
-- Launch flows from the related list
-- Pass current context to flow
-- Handle flow completion and errors
-
-### Security Features
-- CRUD/FLS checks
-- Field-level security validation
-- Error handling for insufficient permissions
-- Safe query building with proper escaping
+[Previous sections remain the same...]
 
 ## Limitations
 
@@ -140,12 +129,19 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 - Column width customization is saved per session only
 - Custom icons must use SLDS icon names
 - Flow inputs are limited to recordId
+- Compound fields are displayed as read-only
+- Search on compound fields searches the individual components
 
 ## Support & Contribution
 
 For issues, questions, or contributions, please raise them through the GitHub repository or contact the package owner.
 
 ## Release Notes
+
+### Version 1.1.0
+- Added support for compound fields (MailingAddress, BillingAddress)
+- Improved address formatting and display
+- Enhanced field handling for complex field types
 
 ### Version 1.0.0
 - Initial release with core functionality

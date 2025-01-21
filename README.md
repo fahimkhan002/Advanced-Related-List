@@ -1,173 +1,153 @@
-# Advanced Salesforce LWC Related List Component
+# Advanced Related List LWC Component
 
-A highly customizable Lightning Web Component (LWC) that provides enhanced related list functionality for Salesforce. This component combines powerful features like server-side pagination, dynamic sorting, global search, and comprehensive field type support.
+A flexible Lightning Web Component that provides an enhanced related list experience in Salesforce with features like pagination, search, sorting, bulk actions, and more.
 
-## 🚀 Features
+## Installation
 
-### Core Features
-- **Server-side Pagination**: Efficiently handle large datasets
-- **Dynamic Sorting**: Sort any column including relationship fields
-- **Global Search**: Search across all records and relationship fields
-- **Responsive Design**: Adapts to different screen sizes
-- **CRUD Operations**: Full create, read, update, delete support
+### Option 1: Package Installation (Recommended)
+1. Install the package using this URL:
+   ```
+ for production: https://login.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfU
 
-### Advanced Features
-- **Field Type Support**:
-  - 📧 Email fields with click-to-email
-  - 📞 Phone fields with click-to-call
-  - 💰 Currency fields with proper formatting
-  - 📅 Date/Time with locale support
-  - 🔗 Lookup fields with navigation
-  - ✅ Boolean fields
-  - 📊 Number and percent fields
-  - 📝 Rich text support
+for sandbox : https://test.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfU
+   ```
+2. Choose the appropriate security level:
+   - Install for Admins Only
+   - Install for All Users
+   - Install for Specific Profiles
 
-### User Experience
-- **Column Management**: 
-  - Resizable columns
-  - Custom column labels
-  - Reset to default widths
-- **Interactive Elements**:
-  - Loading states
-  - Toast notifications
-  - Confirmation dialogs
-- **Flow Integration**: Launch flows from the related list
-- **Bulk Operations**: Select and delete multiple records
+### Option 2: Manual Deployment
+1. Deploy the following files to your org:
+   - `RelatedListController.cls`
+   - `RelatedListControllerTest.cls`
+   - `advancedRelatedList.js`
+   - `advancedRelatedList.html`
+   - `advancedRelatedList.css`
+   - `advancedRelatedList.js-meta.xml`
 
-## 📋 Component Properties
+## Features
 
-| Property Name | Type | Required | Description | Default | Example |
-|--------------|------|----------|-------------|---------|---------|
-| childObjectApiName | String | Yes | Child object API name | - | `'Contact'` |
-| parentLookupField | String | Yes | Lookup field API name | - | `'AccountId'` |
-| fieldsToDisplay | String | Yes | Fields to show | - | `'Name,Email,Phone'` |
-| columnLabels | String | No | Custom column labels | Field labels | `'Name,Email,Phone'` |
-| searchableFields | String | Yes | Searchable fields | - | `'Name,Email'` |
-| sortableFields | String | No | Sortable fields | All fields | `'Name,CreatedDate'` |
-| recordsPerPage | Integer | No | Records per page | 10 | `20` |
-| flowName | String | No | Flow API name | - | `'Update_Contact'` |
-| flowTitle | String | No | Flow modal title | 'Run Flow' | `'Update Contact'` |
-| listTitle | String | No | List title | Object label | `'Contacts'` |
-| customIconName | String | No | SLDS icon name | 'standard:custom' | `'standard:contact'` |
-| iconBackgroundColor | String | No | Icon background color | '#f4b400' | `'#1589EE'` |
+- ✨ Pagination with configurable page size
+- 🔍 Real-time search across configured fields
+- ↕️ Column sorting
+- ⚡ Bulk record deletion
+- 📱 Responsive design
+- 🎨 Custom icons and styling
+- 🔒 Built-in security checks and permissions handling
+- ↔️ Resizable columns
+- 🔄 Flow integration
+- 📝 Inline editing support
 
-## 🛠️ Installation
+## Component Configuration
 
-1. Deploy these components to your org:
-```bash
-force-app/main/default/
-├── classes/
-│   ├── RelatedListController.cls
-│   └── RelatedListControllerTest.cls
-└── lwc/
-    └── advanceRelatedList/
-        ├── advanceRelatedList.js
-        ├── advanceRelatedList.html
-        ├── advanceRelatedList.css
-        └── advanceRelatedList.js-meta.xml
-```
-
-2. Assign appropriate permissions to profiles that need access.
-
-## 📝 Usage Examples
-
-### Basic Implementation
-```html
-<c-advance-related-list
+### Required Properties
+```javascript
+<c-advanced-related-list
     child-object-api-name="Contact"
     parent-lookup-field="AccountId"
     fields-to-display="Name,Email,Phone"
-    searchable-fields="Name,Email">
-</c-advance-related-list>
+    searchable-fields="Name,Email"
+    records-per-page="10">
+</c-advanced-related-list>
 ```
 
-### Advanced Implementation
-```html
-<c-advance-related-list
+### Configuration Options
+
+| Property | Description | Required | Default |
+|----------|-------------|----------|---------|
+| childObjectApiName | API name of the child object (e.g., Contact) | Yes | - |
+| parentLookupField | API name of the lookup field on child object (e.g., AccountId) | Yes | - |
+| fieldsToDisplay | Comma-separated list of fields to display | Yes | - |
+| searchableFields | Comma-separated list of fields to enable search | Yes | - |
+| recordsPerPage | Number of records per page | No | 10 |
+| flowName | API name of a flow to launch | No | - |
+| flowTitle | Title for the flow modal | No | "Run Flow" |
+| listTitle | Custom title for the related list | No | "[Object] Related List" |
+| customIconName | SLDS icon name | No | - |
+| iconBackgroundColor | Background color for the icon | No | "#f4b400" |
+| columnLabels | Custom labels for columns | No | - |
+| sortableFields | Fields that can be sorted | No | - |
+
+## Usage Examples
+
+### Basic Configuration
+```javascript
+<c-advanced-related-list
     child-object-api-name="Contact"
     parent-lookup-field="AccountId"
-    fields-to-display="Name,Email,Phone,Title,Account.Name,CreatedDate"
-    searchable-fields="Name,Email,Title,Account.Name"
-    sortable-fields="Name,CreatedDate"
-    column-labels="Full Name,Email,Phone,Title,Account,Created"
-    records-per-page="15"
+    fields-to-display="Name,Email,Phone,Title"
+    searchable-fields="Name,Email"
+    records-per-page="5">
+</c-advanced-related-list>
+```
+
+### Advanced Configuration with Flow
+```javascript
+<c-advanced-related-list
+    child-object-api-name="Contact"
+    parent-lookup-field="AccountId"
+    fields-to-display="Name,Email,Phone,Title,Account.Name"
+    searchable-fields="Name,Email,Phone"
+    records-per-page="10"
     flow-name="Contact_Update_Flow"
     flow-title="Update Contact"
     list-title="Customer Contacts"
     custom-icon-name="standard:contact"
-    icon-background-color="#1589EE">
-</c-advance-related-list>
+    icon-background-color="#1589EE"
+    column-labels="Full Name,Email Address,Phone Number,Job Title,Account"
+    sortable-fields="Name,Email,Title">
+</c-advanced-related-list>
 ```
 
-## 🎯 Key Features Explained
+## Component Features
 
-### Server-side Pagination
-- Efficient handling of large datasets
-- Configurable page sizes
-- Maintains state during operations
+### Pagination
+- Configure records per page
+- Navigate through pages
+- Shows total record count
 
-### Global Search
-- Searches entire dataset, not just current page
-- Supports relationship fields
-- Real-time search with debouncing
-- Case-insensitive matching
+### Search
+- Real-time search across configured fields
+- Debounced search to optimize performance
+- Clear search functionality
 
-### Field Type Support
-- Automatic handling of different field types
-- Clickable emails and phone numbers
-- Proper formatting for numbers and currencies
-- Date/time localization
-- Relationship field navigation
+### Bulk Actions
+- Select multiple records
+- Bulk delete with confirmation
+- Permission-based action visibility
 
-## 💡 Best Practices
+### Column Management
+- Resize columns
+- Sort by clicking column headers
+- Reset column widths
+- Custom column labels
 
-1. **Performance Optimization**
-   - Include only necessary fields
-   - Set appropriate page sizes
-   - Index searchable fields
+### Flow Integration
+- Launch flows from the related list
+- Pass current context to flow
+- Handle flow completion and errors
 
-2. **Search Configuration**
-   - Choose searchable fields strategically
-   - Consider performance impact
-   - Test with large datasets
+### Security Features
+- CRUD/FLS checks
+- Field-level security validation
+- Error handling for insufficient permissions
+- Safe query building with proper escaping
 
-3. **Mobile Considerations**
-   - Test on mobile devices
-   - Limit columns for mobile
-   - Consider field types for mobile use
+## Limitations
 
-4. **Error Handling**
-   - Monitor performance
-   - Handle null values
-   - Implement proper error catching
+- Maximum 100 records can be selected for bulk operations
+- Column width customization is saved per session only
+- Custom icons must use SLDS icon names
+- Flow inputs are limited to recordId
 
-## ⚠️ Limitations
+## Support & Contribution
 
-- Maximum 100 records for bulk selection
-- Rich text shown as plain text in table
-- Some field types have limited mobile functionality
+For issues, questions, or contributions, please raise them through the GitHub repository or contact the package owner.
 
-## 🧪 Testing
+## Release Notes
 
-Run the included test class:
-```bash
-sfdx force:apex:test:run -n "RelatedListControllerTest" -r human
-```
-
-## 🤝 Contributing
-
-Pull requests welcome! For major changes, please open an issue first.
-
-## 📄 License
-
-[MIT](https://choosealicense.com/licenses/mit/)
-
-## 💬 Support
-
-For issues, feature requests, or support:
-1. Check existing issues
-2. Open a new issue with:
-   - Clear description
-   - Steps to reproduce
-   - Expected behavior
-   - Screenshots if applicable
+### Version 1.0.0
+- Initial release with core functionality
+- Pagination, search, and bulk delete features
+- Flow integration capability
+- Responsive design implementation

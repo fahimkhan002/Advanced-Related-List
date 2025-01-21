@@ -12,7 +12,7 @@ import deleteRecord from '@salesforce/apex/RelatedListController.deleteRecord';
 // ===== IMPORTS AND CONSTANTS =====
 const FIXED_WIDTH = {
     number: 60,    // Width for row number column
-    action: 180    // Width for action column
+    action: 80    // Width for action column
 };
 
 const actions = [
@@ -553,38 +553,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             });
     }
 
-    async handleBulkDelete() {
-        try {
-            this.isLoading = true;
-            const recordIds = this.preSelectedRows;
-            
-            const deletePromises = recordIds.map(recordId => 
-                deleteRecord({ 
-                    recordId: recordId, 
-                    objectName: this.childObjectApiName 
-                })
-            );
-    
-            await Promise.all(deletePromises);
-            
-            this.showToast('Success', `${recordIds.length} records deleted successfully`, 'success');
-            
-            this.preSelectedRows = [];
-            this.selectedRows = [];
-            this.showBulkDeleteButton = false;
-            this.showBulkDeleteModal = false;
-            
-            this.handleRefresh();
-        } catch (error) {
-            if (error.body && error.body.message && error.body.message.includes('Insufficient permissions')) {
-                this.permissionError = true;
-                this.permissionErrorMessage = error.body.message;
-            } else {
-                this.showToast('Error', error.body?.message || 'Failed to delete records', 'error');
-            }
-        } finally {
-            this.isLoading = false;
-        }
+    handleBulkDelete() {
+        this.showBulkDeleteModal = true;
     }
 
     async handleConfirmBulkDelete() {

@@ -34,32 +34,41 @@ public with sharing class RelatedListController {
      * @throws SecurityException if the user lacks required permissions
      */
     private static void checkObjectCRUD(String objectType, String operation) {
-        Schema.DescribeSObjectResult describe = Schema.getGlobalDescribe().get(objectType).getDescribe();
-        
-        Boolean hasPermission = false;
-        String errorMsg = '';
-        
-        switch on operation.toUpperCase() {
-            when 'CREATE' {
-                hasPermission = describe.isCreateable();
-                errorMsg = 'create';
+        try {
+            // First verify the object type exists
+            Schema.SObjectType sObjectType = Schema.getGlobalDescribe().get(objectType);
+            if (sObjectType == null) {
+                throw new SecurityException('Invalid object type: ' + objectType);
             }
-            when 'READ' {
-                hasPermission = describe.isAccessible();
-                errorMsg = 'read';
+            
+            Schema.DescribeSObjectResult describe = sObjectType.getDescribe();
+            Boolean hasPermission = false;
+            String errorMsg = '';
+            
+            switch on operation.toUpperCase() {
+                when 'CREATE' {
+                    hasPermission = describe.isCreateable();
+                    errorMsg = 'create';
+                }
+                when 'READ' {
+                    hasPermission = describe.isAccessible();
+                    errorMsg = 'read';
+                }
+                when 'UPDATE' {
+                    hasPermission = describe.isUpdateable();
+                    errorMsg = 'update';
+                }
+                when 'DELETE' {
+                    hasPermission = describe.isDeletable();
+                    errorMsg = 'delete';
+                }
             }
-            when 'UPDATE' {
-                hasPermission = describe.isUpdateable();
-                errorMsg = 'update';
+            
+            if (!hasPermission) {
+                throw new SecurityException('Insufficient permissions to ' + errorMsg + ' ' + objectType + ' records');
             }
-            when 'DELETE' {
-                hasPermission = describe.isDeletable();
-                errorMsg = 'delete';
-            }
-        }
-        
-        if (!hasPermission) {
-            throw new SecurityException('Insufficient permissions to ' + errorMsg + ' ' + objectType + ' records');
+        } catch (Exception e) {
+            throw new SecurityException('Error checking permissions: ' + e.getMessage());
         }
     }
     
@@ -223,22 +232,47 @@ public with sharing class RelatedListController {
     @AuraEnabled
     public static void updateRecords(List<SObject> records, String objectName) {
         try {
+            System.debug('Starting updateRecords method');
+            System.debug('Records to update: ' + records);
+            System.debug('Object name: ' + objectName);
+            
+            // Input validation
             if (records == null || records.isEmpty()) {
                 throw new AuraHandledException('No records provided for update.');
             }
-
-            // Security checks
-            checkObjectCRUD(objectName, 'UPDATE');
+    
+            // Basic security check
+            Schema.SObjectType sObjectType = Schema.getGlobalDescribe().get(objectName);
+            if (sObjectType == null) {
+                throw new AuraHandledException('Invalid object type: ' + objectName);
+            }
+    
+            Schema.DescribeSObjectResult describeResult = sObjectType.getDescribe();
+            if (!describeResult.isUpdateable()) {
+                throw new AuraHandledException('Insufficient permissions to update ' + objectName);
+            }
+    
+            // Update records
+            Database.SaveResult[] results = Database.update(records, false);
             
-            // Get fields being updated
-            Map<String, Object> fieldValues = records[0].getPopulatedFieldsAsMap();
-            checkFieldSecurity(objectName, new List<String>(fieldValues.keySet()), 'EDIT');
-
-            update records;
-        } catch (SecurityException e) {
-            throw new AuraHandledException(e.getMessage());
+            // Check results
+            List<String> errors = new List<String>();
+            for (Database.SaveResult result : results) {
+                if (!result.isSuccess()) {
+                    for (Database.Error err : result.getErrors()) {
+                        errors.add(err.getMessage());
+                    }
+                }
+            }
+            
+            if (!errors.isEmpty()) {
+                throw new AuraHandledException(String.join(errors, '. '));
+            }
+    
         } catch (Exception e) {
-            handleException(e);
+            System.debug(LoggingLevel.ERROR, 'Error in updateRecords: ' + e.getMessage());
+            System.debug(LoggingLevel.ERROR, 'Stack trace: ' + e.getStackTraceString());
+            throw new AuraHandledException(e.getMessage());
         }
     }
 

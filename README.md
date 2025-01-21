@@ -121,8 +121,6 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 - Clean address display with proper formatting
 - Works seamlessly with other features like sorting and searching
 
-[Previous sections remain the same...]
-
 ## Limitations
 
 - Maximum 100 records can be selected for bulk operations

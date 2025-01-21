@@ -191,3 +191,20 @@ lightning-datatable {
     margin-bottom: 1rem;
     border-radius: 0.25rem;
 }
+
+
+.address-field {
+    white-space: pre-line;
+    line-height: 1.4;
+}
+
+/* Ensure proper wrapping for address content */
+[data-field-type="address"] {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Adjust padding for address cells */
+lightning-datatable td.slds-cell-wrap[data-label*="Address"] {
+    padding: 0.5rem;
+}

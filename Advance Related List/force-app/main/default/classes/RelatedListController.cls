@@ -79,11 +79,23 @@ public with sharing class RelatedListController {
      * @param operation The operation to check (READ or EDIT)
      * @throws SecurityException if the user lacks required permissions
      */
+    // Modify the checkFieldSecurity method to handle address fields
     private static void checkFieldSecurity(String objectType, List<String> fields, String operation) {
-        Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe().get(objectType).getDescribe().fields.getMap();
+        Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe()
+            .get(objectType).getDescribe().fields.getMap();
         Set<String> processedFields = new Set<String>();
         
         for (String field : fields) {
+            // Handle address fields
+            if (field.toLowerCase().endsWith('address')) {
+                String baseField = field;
+                if (!processedFields.contains(baseField)) {
+                    processedFields.add(baseField);
+                    checkFieldAccess(fieldMap, baseField, operation);
+                }
+                continue;
+            }
+            
             // Handle relationship fields
             if (field.contains('.')) {
                 String baseField = field.split('\\.')[0];
@@ -100,7 +112,7 @@ public with sharing class RelatedListController {
             }
         }
     }
-    
+        
     /**
      * @description Checks access for a single field
      * @param fieldMap Map of field descriptors
@@ -316,28 +328,38 @@ public with sharing class RelatedListController {
         Set<String> queryFields = new Set<String>{'Id'};
         
         for(String field : fields) {
-            // Handle compound address fields
-            if(field == 'MailingAddress') {
-                queryFields.addAll(new Set<String>{
-                    'MailingStreet',
-                    'MailingCity',
-                    'MailingState',
-                    'MailingCountry',
-                    'MailingPostalCode'
-                });
-            } else if(field == 'BillingAddress') {
-                queryFields.addAll(new Set<String>{
-                    'BillingStreet',
-                    'BillingCity',
-                    'BillingState',
-                    'BillingCountry',
-                    'BillingPostalCode'
-                });
-            } else {
+            // Handle standard address fields
+            if(isStandardAddressField(field)) {
+                // For standard address fields, we need to query individual components
+                String prefix = field.replace('Address', '');
+                queryFields.add(prefix + 'Street');
+                queryFields.add(prefix + 'City');
+                queryFields.add(prefix + 'State');
+                queryFields.add(prefix + 'PostalCode');
+                queryFields.add(prefix + 'Country');
+            }
+            // Handle custom address fields
+            else if(field.toLowerCase().endsWith('__c') && 
+                    field.toLowerCase().contains('address')) {
+                queryFields.add(field + '.street');
+                queryFields.add(field + '.city');
+                queryFields.add(field + '.state');
+                queryFields.add(field + '.postalCode');
+                queryFields.add(field + '.country');
+                queryFields.add(field);
+            }
+            else {
                 queryFields.add(field);
             }
         }
         return queryFields;
+    }
+
+    private static Boolean isStandardAddressField(String fieldName) {
+        return (fieldName == 'MailingAddress' || 
+                fieldName == 'ShippingAddress' || 
+                fieldName == 'BillingAddress' || 
+                fieldName == 'OtherAddress');
     }
 
     private static String buildWhereClause(

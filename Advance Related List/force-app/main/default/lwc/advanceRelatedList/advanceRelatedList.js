@@ -306,6 +306,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     // Table Events
     handleSort(event) {
         const { fieldName: sortedBy, sortDirection } = event.detail;
+        console.log('Sort triggered:', { sortedBy, sortDirection });
         this.sortedBy = sortedBy;
         this.sortedDirection = sortDirection;
     
@@ -654,6 +655,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         });
         event.stopPropagation();
         this.showSettingsMenu = !this.showSettingsMenu;
+        console.log('New state:', this.showSettingsMenu);
     }
 
     handleResetColumnWidths(event) {
@@ -746,17 +748,18 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     }
 
     //Data Processing Methods
+    // Replace your existing initializeColumns method with this updated version
     initializeColumns() {
         const columnCount = this.fieldsArray.length;
         
         // Calculate available width for data columns
         const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
         let columnWidth;
-    
+
         // Get container width
         const container = this.template.querySelector('.table-container');
         const availableWidth = container ? container.offsetWidth : 1;
-    
+
         if (columnCount <= 4) {
             // For 5 or fewer columns, calculate width to fit container
             columnWidth = Math.floor((availableWidth - totalFixedWidth) / columnCount);
@@ -764,7 +767,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             // For more than 5 columns, use fixed width
             columnWidth = 255; // Fixed width to ensure scrolling
         }
-    
+
         // Initialize the columns array
         this.columns = [
             // Row Number Column
@@ -789,12 +792,10 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 const isLookupField = field.includes('.');
                 const isEmailField = field.toLowerCase().includes('email');
                 const isPhoneField = field.toLowerCase().includes('phone');
-                const isCompoundField = ['MailingAddress', 'BillingAddress'].includes(field);
-                const isDateField = this.objectInfo?.fields[field]?.dataType === 'datetime' || 
-                                this.objectInfo?.fields[field]?.dataType === 'date';
                 const fieldType = this.objectInfo?.fields[field]?.dataType?.toLowerCase();
                 const fieldInfo = this.objectInfo?.fields[field];
-    
+                const isAddressField = fieldType === 'address' || this.isCompoundAddressField(field);
+
                 let fieldConfig = {
                     label: this.getColumnLabel(field, index),
                     fieldName: field,
@@ -802,26 +803,25 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                     wrapText: true,
                     initialWidth: this.columnWidths[field] || columnWidth
                 };
-    
+
                 // Handle different field types
-                if(field === 'MailingAddress' || field === 'BillingAddress') {
-                    fieldConfig.type = 'text';
-                    fieldConfig.wrapText = true;
-                } else if (isNameField) {
+                if (isNameField) {
                     fieldConfig.type = 'url';
                     fieldConfig.fieldName = 'nameUrl';
                     fieldConfig.typeAttributes = {
                         label: { fieldName: 'Name' },
                         target: '_self'
                     };
-                } else if (isLookupField) {
+                } 
+                else if (isLookupField) {
                     fieldConfig.type = 'url';
                     fieldConfig.fieldName = `${field}_url`;
                     fieldConfig.typeAttributes = {
                         label: { fieldName: field },
                         target: '_self'
                     };
-                } else if (isEmailField) {
+                }
+                else if (isEmailField) {
                     fieldConfig.type = 'button';
                     fieldConfig.typeAttributes = {
                         label: { fieldName: field },
@@ -832,7 +832,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                         disabled: false,
                         title: { fieldName: field }
                     };
-                } else if (isPhoneField) {
+                }
+                else if (isPhoneField) {
                     fieldConfig.type = 'button';
                     fieldConfig.typeAttributes = {
                         label: { fieldName: field },
@@ -841,10 +842,10 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                         iconPosition: 'left',
                         variant: 'base',
                         disabled: { fieldName: `${field}_disabled` },
-                        title: { fieldName: field },
-                        class: 'phone-button'
+                        title: { fieldName: field }
                     };
-                } else if (fieldType === 'currency') {
+                }
+                else if (fieldType === 'currency') {
                     fieldConfig = {
                         ...fieldConfig,
                         type: 'currency',
@@ -858,27 +859,31 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                             alignment: 'right'
                         }
                     };
-                } else if (fieldType === 'percent') {
+                }
+                else if (fieldType === 'percent') {
                     fieldConfig.type = 'percent';
                     fieldConfig.typeAttributes = {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                         step: '0.01'
                     };
-                } else if (fieldType === 'double' || fieldType === 'integer') {
+                }
+                else if (fieldType === 'double' || fieldType === 'integer') {
                     fieldConfig.type = 'number';
                     fieldConfig.typeAttributes = {
                         minimumFractionDigits: fieldType === 'integer' ? 0 : 2,
                         maximumFractionDigits: fieldType === 'integer' ? 0 : 2
                     };
-                } else if (fieldType === 'date') {
+                }
+                else if (fieldType === 'date') {
                     fieldConfig.type = 'date';
                     fieldConfig.typeAttributes = {
                         year: 'numeric',
                         month: '2-digit',
                         day: '2-digit'
                     };
-                } else if (fieldType === 'datetime') {
+                }
+                else if (fieldType === 'datetime') {
                     fieldConfig.type = 'date';
                     fieldConfig.typeAttributes = {
                         year: 'numeric',
@@ -887,12 +892,28 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                         hour: '2-digit',
                         minute: '2-digit'
                     };
-                } else if (fieldType === 'boolean') {
+                }
+                else if (fieldType === 'boolean') {
                     fieldConfig.type = 'boolean';
-                } else if (fieldType === 'rich_textarea') {
+                }
+                else if (fieldType === 'rich_textarea') {
                     fieldConfig.type = 'richText';
                 }
-    
+                else if (isAddressField) {
+                    fieldConfig = {
+                        ...fieldConfig,
+                        type: 'text',
+                        fieldName: `${field}_formatted`,
+                        typeAttributes: {
+                            class: 'address-field'
+                        },
+                        cellAttributes: {
+                            class: 'slds-cell-wrap',
+                            alignment: 'left'
+                        }
+                    };
+                }
+
                 return fieldConfig;
             }),
             
@@ -904,7 +925,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 initialWidth: FIXED_WIDTH.action
             }
         ];
-    
+
         // Update CSS classes for table container
         const tableContainer = this.template.querySelector('.table-container');
         if (tableContainer) {
@@ -916,11 +937,12 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
                 tableContainer.classList.add('heavy-columns');
             }
         }
-    }   
+    }  
    
     processRecords(data) {
-       
+        
         if (!data || !data.records) {
+            
             this.data = [];
             return;
         }
@@ -935,9 +957,22 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.data = data.records.map((record, index) => {
             const flatRecord = { ...record };
             flatRecord.rowNumber = startingNumber + index;
+
+        // Process address fields first
+        this.fieldsArray.forEach(field => {
+            if (this.isCompoundAddressField(field)) {
+                flatRecord[`${field}_formatted`] = this.formatAddressField(flatRecord, field);
+            }
+        });
             
             // Process currency fields that are in our fieldsToDisplay
             currencyFields.forEach(fieldName => {
+                console.log(`Processing currency field ${fieldName}:`, {
+                    value: flatRecord[fieldName],
+                    type: typeof flatRecord[fieldName],
+                    hasValue: fieldName in flatRecord
+                });
+    
                 if (fieldName in flatRecord) {
                     const numValue = parseFloat(flatRecord[fieldName]);
                     if (!isNaN(numValue)) {
@@ -957,11 +992,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     
             // Process other fields
             this.fieldsArray.forEach(field => {
-                if(field === 'MailingAddress') {
-                    flatRecord.MailingAddress = this.formatAddressField(record, 'Mailing');
-                } else if(field === 'BillingAddress') {
-                    flatRecord.BillingAddress = this.formatAddressField(record, 'Billing');
-                } else if (field.includes('.')) {
+                if (field.includes('.')) {
                     // Handle relationship fields
                     const [relationshipField, relatedField] = field.split('.');
                     if (flatRecord[relationshipField]) {
@@ -994,6 +1025,17 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             return flatRecord;
         });
     
+        // Debug the processed data
+        const processedCurrencyFields = this.data.map(record => ({
+            id: record.Id,
+            name: record.Name,
+            currencyFields: currencyFields.reduce((acc, field) => {
+                acc[field] = record[field];
+                return acc;
+            }, {})
+        }));
+        
+    
         this.filteredData = [...this.data];
     
         // Maintain selections after refresh
@@ -1001,8 +1043,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             const selectedIds = new Set(this.preSelectedRows);
             this.selectedRows = this.filteredData.filter(row => selectedIds.has(row.Id));
         }
-        
         this.totalPages = Math.ceil(data.totalRecords / this.recordsPerPage);
+        
     }
 
     getSortValue(record, field) {
@@ -1149,56 +1191,35 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.permissionErrorMessage = '';
     }
 
-
-    isCompoundField(field) {
-        return ['MailingAddress', 'BillingAddress'].includes(field);
+    isCompoundAddressField(fieldName) {
+        if (!fieldName) return false;
+        return fieldName.toLowerCase().endsWith('address') &&
+               (fieldName.toLowerCase().includes('mailing') ||
+                fieldName.toLowerCase().includes('shipping') ||
+                fieldName.toLowerCase().includes('billing') ||
+                fieldName.toLowerCase().includes('other'));
     }
     
-    createCompoundFieldColumn(field, index) {
-        const label = this.getColumnLabel(field, index);
-        const componentFields = this.getCompoundFieldComponents(field);
+    formatAddressField(record, baseFieldName) {
+        // For standard address fields, we need to use the individual components
+        const prefix = baseFieldName.replace('Address', '');
+        const street = record[prefix + 'Street'];
+        const city = record[prefix + 'City'];
+        const state = record[prefix + 'State'];
+        const postalCode = record[prefix + 'PostalCode'];
+        const country = record[prefix + 'Country'];
         
-        return {
-            label: label,
-            fieldName: field,
-            type: 'text',
-            wrapText: true,
-            initialWidth: this.columnWidths[field] || this.defaultColumnWidth,
-            typeAttributes: {
-                label: { 
-                    fieldName: `${field}_formatted` 
-                }
-            }
-        };
-    }
-    
-    getCompoundFieldComponents(field) {
-        const components = {
-            'MailingAddress': ['MailingStreet', 'MailingCity', 'MailingState', 'MailingPostalCode', 'MailingCountry'],
-            'BillingAddress': ['BillingStreet', 'BillingCity', 'BillingState', 'BillingPostalCode', 'BillingCountry']
-        };
-        return components[field] || [];
-    }
-
-    formatCompoundField(record, components) {
-        const values = components
-            .map(component => record[component])
-            .filter(value => value);
+        const parts = [];
+        if (street) parts.push(street);
+        if (city) {
+            let cityRegion = city;
+            if (state) cityRegion += `, ${state}`;
+            if (postalCode) cityRegion += ` ${postalCode}`;
+            parts.push(cityRegion);
+        }
+        if (country) parts.push(country);
         
-        return values.join(', ');
+        return parts.join('\n');
     }
-
-    formatAddressField(record, addressType) {
-        const addressComponents = [];
-        
-        if(record[addressType + 'Street']) addressComponents.push(record[addressType + 'Street']);
-        if(record[addressType + 'City']) addressComponents.push(record[addressType + 'City']);
-        if(record[addressType + 'State']) addressComponents.push(record[addressType + 'State']);
-        if(record[addressType + 'PostalCode']) addressComponents.push(record[addressType + 'PostalCode']);
-        if(record[addressType + 'Country']) addressComponents.push(record[addressType + 'Country']);
-        
-        return addressComponents.join(', ');
-    }
-    
 
 }

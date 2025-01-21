@@ -314,7 +314,29 @@ public with sharing class RelatedListController {
 
     private static Set<String> buildQueryFields(List<String> fields) {
         Set<String> queryFields = new Set<String>{'Id'};
-        queryFields.addAll(fields);
+        
+        for(String field : fields) {
+            // Handle compound address fields
+            if(field == 'MailingAddress') {
+                queryFields.addAll(new Set<String>{
+                    'MailingStreet',
+                    'MailingCity',
+                    'MailingState',
+                    'MailingCountry',
+                    'MailingPostalCode'
+                });
+            } else if(field == 'BillingAddress') {
+                queryFields.addAll(new Set<String>{
+                    'BillingStreet',
+                    'BillingCity',
+                    'BillingState',
+                    'BillingCountry',
+                    'BillingPostalCode'
+                });
+            } else {
+                queryFields.add(field);
+            }
+        }
         return queryFields;
     }
 

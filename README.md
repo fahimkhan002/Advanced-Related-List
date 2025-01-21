@@ -7,11 +7,11 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 ### Option 1: Package Installation (Recommended)
 1. Install the package in production using this URL:
    ```
-   https://login.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfZ
+   https://login.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfe
    ```
    and for sandbox:
    ```
-   https://test.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfZ
+   https://test.salesforce.com/packaging/installPackage.apexp?p0=04tJ30000008qfe
    ```
 2. Choose the appropriate security level:
    - Install for Admins Only

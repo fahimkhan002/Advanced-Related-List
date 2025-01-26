@@ -1,6 +1,6 @@
 /**
  * @description Controller class for the Advanced Related List LWC component with security checks
- * @author Your Name
+ * @author Fahim Khan
  * @date 2025-01-15
  */
 public with sharing class RelatedListController {

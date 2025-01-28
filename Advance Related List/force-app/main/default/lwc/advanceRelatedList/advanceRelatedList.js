@@ -79,10 +79,26 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         isUpdateable: false,
         isDeletable: false
     };
+    @track showFilterPanel = false;
+    @track activeFilters = [];
 
     //private properties
     searchTimeout;
     maxRowSelection = 100; // or whatever maximum number you want to allow
+
+    // Add these methods
+    handleFilterClick() {
+        this.showFilterPanel = !this.showFilterPanel;
+    }
+
+    handleFilterChange(event) {
+        this.activeFilters = event.detail;
+        this.pageNumber = 1; // Reset to first page
+        this.handleRefresh();
+    }
+
+
+
 
     // ===== GETTERS =====
     get hasIcon() {
@@ -224,7 +240,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         pageSize: '$recordsPerPage',
         pageNumber: '$pageNumber',
         searchTerm: '$debouncedSearchTerm',
-        searchableFields: '$searchableFieldsArray'
+        searchableFields: '$searchableFieldsArray',
+        filters: '$activeFilters'
     })
     wiredRecords(result) {
         this.wiredRecordResult = result;

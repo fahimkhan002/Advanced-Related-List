@@ -1,0 +1,74 @@
+<template>
+    <div class="slds-form-element">
+        <div class="slds-grid slds-grid_vertical">
+            <template for:each={filters} for:item="filter" for:index="index">
+                <div key={filter.id} class="slds-grid slds-gutters slds-m-bottom_x-small">
+                    <!-- Logic Operator -->
+                    <div class="slds-col slds-size_1-of-12">
+                        <template if:true={index}>
+                            <lightning-combobox
+                                data-id={filter.id}
+                                variant="label-hidden"
+                                value={filter.logicOperator}
+                                options={logicOperators}
+                                onchange={handleLogicOperatorChange}>
+                            </lightning-combobox>
+                        </template>
+                    </div>
+                    
+                    <!-- Field -->
+                    <div class="slds-col slds-size_3-of-12">
+                        <lightning-combobox
+                            data-id={filter.id}
+                            label="Field"
+                            value={filter.field}
+                            options={fieldOptions}
+                            onchange={handleFieldChange}>
+                        </lightning-combobox>
+                    </div>
+                    
+                    <!-- Operator -->
+                    <div class="slds-col slds-size_3-of-12">
+                        <lightning-combobox
+                            data-id={filter.id}
+                            label="Operator"
+                            value={filter.operator}
+                            options={operators}
+                            onchange={handleOperatorChange}>
+                        </lightning-combobox>
+                    </div>
+                    
+                    <!-- Value -->
+                    <div class="slds-col slds-size_3-of-12">
+                        <lightning-input
+                            data-id={filter.id}
+                            label="Value"
+                            value={filter.value}
+                            onchange={handleValueChange}>
+                        </lightning-input>
+                    </div>
+                    
+                    <!-- Remove Button -->
+                    <div class="slds-col slds-size_2-of-12 slds-align-bottom">
+                        <lightning-button-icon
+                            data-id={filter.id}
+                            icon-name="utility:delete"
+                            alternative-text="Remove Filter"
+                            title="Remove Filter"
+                            onclick={removeFilter}>
+                        </lightning-button-icon>
+                    </div>
+                </div>
+            </template>
+        </div>
+        
+        <!-- Add Filter Button -->
+        <div class="slds-m-top_small">
+            <lightning-button
+                label="Add Filter"
+                onclick={addFilter}
+                icon-name="utility:add">
+            </lightning-button>
+        </div>
+    </div>
+</template>

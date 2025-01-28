@@ -61,6 +61,15 @@
                                 class="search-input">
                             </lightning-input>
                         </div>
+
+                    <!-- Add the filter button HERE, right after the search input -->
+                        <lightning-button-icon 
+                        icon-name="utility:filter"
+                        alternative-text="Filter"
+                        title="Filter"
+                        class="slds-m-left_xx-small"
+                        onclick={handleFilterClick}>
+                        </lightning-button-icon>
                         
                         <!-- Action Buttons -->
                         <div class="slds-button-group">
@@ -140,6 +149,17 @@
             </div>
         </div>
 
+        <template if:true={showFilterPanel}>
+            <div class="slds-p-around_small">
+                <c-filter-panel
+                    object-info={objectInfo}
+                    fields={fieldsArray}
+                    onfilterchange={handleFilterChange}>
+                </c-filter-panel>
+            </div>
+        </template>
+
+        
         <!-- 2. Error Alert Section -->
         <template if:true={error}>
             <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error">

@@ -208,3 +208,54 @@ lightning-datatable {
 lightning-datatable td.slds-cell-wrap[data-label*="Address"] {
     padding: 0.5rem;
 }
+
+
+@media (max-width: 768px) {
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch; /* For smooth scrolling on iOS */
+    }
+
+    /* Adjust header layout for mobile */
+    .slds-card__header {
+        padding: 0.5rem;
+    }
+
+    /* Stack header elements on mobile */
+    .slds-grid_align-spread {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    /* Adjust search and actions for mobile */
+    .slds-col.slds-grid.slds-grid_align-end {
+        width: 100%;
+    }
+
+    /* Make search full width on mobile */
+    .search-input {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    /* Adjust button sizing for better touch targets */
+    .slds-button-group lightning-button-icon {
+        --sds-c-icon-color-foreground-default: #0176d3;
+        padding: 0.5rem;
+    }
+
+    /* Adjust modal sizing for mobile */
+    .slds-modal__container {
+        margin: 0;
+        max-width: 100%;
+        width: 100%;
+        height: 100vh;
+    }
+}
+
+/* Add touch-friendly styles */
+.mobile-touch-target {
+    min-height: 44px; /* Apple's recommended minimum */
+    min-width: 44px;
+}

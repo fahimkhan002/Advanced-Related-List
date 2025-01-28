@@ -53,7 +53,8 @@ private class RelatedListControllerTest {
             5,
             1,
             '',
-            new List<String>()
+            new List<String>(),
+            new List<Map<String, String>>()
         );
         
         System.assertEquals(NUM_CONTACTS, result.totalRecords, 'Total records count should match');
@@ -68,7 +69,8 @@ private class RelatedListControllerTest {
             5,
             2,
             '',
-            new List<String>()
+            new List<String>(),
+            new List<Map<String, String>>()
         );
         
         System.assertEquals(5, page2Result.records.size(), 'Second page size should match');
@@ -94,7 +96,8 @@ private class RelatedListControllerTest {
             5,
             1,
             '',
-            new List<String>()
+            new List<String>(),
+            new List<Map<String, String>>()
         );
         
         // Test with Account's BillingAddress
@@ -106,7 +109,8 @@ private class RelatedListControllerTest {
             5,
             1,
             '',
-            new List<String>()
+            new List<String>(),
+            new List<Map<String, String>>()
         );
         
         Test.stopTest();
@@ -139,7 +143,8 @@ private class RelatedListControllerTest {
             10,
             1,
             'Test Contact 1',
-            new List<String>{'LastName', 'MailingStreet'}
+            new List<String>{'LastName', 'MailingStreet'},
+            new List<Map<String, String>>()
         );
         
         System.assertNotEquals(0, searchResult.records.size(), 'Should find records with search term');
@@ -162,7 +167,8 @@ private class RelatedListControllerTest {
             10,
             1,
             'Test St',
-            new List<String>{'BillingStreet', 'BillingCity'}
+            new List<String>{'BillingStreet', 'BillingCity'},
+            new List<Map<String, String>>()
         );
         
         Test.stopTest();
@@ -238,7 +244,8 @@ private class RelatedListControllerTest {
                 10,
                 1,
                 '',
-                new List<String>()
+                new List<String>(),
+                new List<Map<String, String>>()
             );
             System.assert(true, 'Should not throw exception for valid object');
             
@@ -252,7 +259,8 @@ private class RelatedListControllerTest {
                     10,
                     1,
                     '',
-                    new List<String>()
+                    new List<String>(),
+                    new List<Map<String, String>>()
                 );
                 System.assert(false, 'Should throw exception for invalid object');
             } catch(AuraHandledException e) {
@@ -280,7 +288,8 @@ private class RelatedListControllerTest {
                 10,
                 1,
                 '',
-                new List<String>()
+                new List<String>(),
+                new List<Map<String, String>>()
             );
         } catch(AuraHandledException e) {
             blankObjectExceptionThrown = true;
@@ -329,7 +338,8 @@ private class RelatedListControllerTest {
                 5,
                 1,
                 '',
-                new List<String>()
+                new List<String>(),
+                new List<Map<String, String>>()
             );
         } catch(AuraHandledException e) {
             exceptionThrown = true;
@@ -357,7 +367,8 @@ private class RelatedListControllerTest {
             5,
             1,
             '',
-            new List<String>()
+            new List<String>(),
+            new List<Map<String, String>>()
         );
         
         System.assertNotEquals(0, result.records.size(), 'Should return records');
@@ -408,7 +419,8 @@ private class RelatedListControllerTest {
             50,
             1,
             '',
-            new List<String>()
+            new List<String>(),
+            new List<Map<String, String>>()
         );
         
         Test.stopTest();
@@ -416,4 +428,197 @@ private class RelatedListControllerTest {
         System.assertEquals(50, result.records.size(), 'Should respect page size limit');
         System.assert(result.totalRecords > 200, 'Should handle large data sets');
     }
+
+
+    @isTest
+    static void testFilterFunctionality() {
+        // Setup test data
+        Account testAccount = [SELECT Id FROM Account LIMIT 1];
+        
+        Test.startTest();
+        
+        // Test LIKE operator
+        RelatedListController.RelatedListWrapper resultLike = RelatedListController.getRecords(
+            'Contact',
+            'AccountId',
+            testAccount.Id,
+            new List<String>{'LastName', 'Email'},
+            10,
+            1,
+            '',
+            new List<String>(),
+            new List<Map<String, String>>{
+                new Map<String, String>{
+                    'field' => 'LastName',
+                    'operator' => 'LIKE',
+                    'value' => 'Test',
+                    'logicOperator' => 'AND'
+                }
+            }
+        );
+        
+        System.assert(resultLike.records.size() > 0, 'Should find records with LIKE filter');
+    
+        // Test does not contain operator
+        RelatedListController.RelatedListWrapper resultNotContain = RelatedListController.getRecords(
+            'Contact',
+            'AccountId',
+            testAccount.Id,
+            new List<String>{'LastName', 'Email'},
+            10,
+            1,
+            '',
+            new List<String>(),
+            new List<Map<String, String>>{
+                new Map<String, String>{
+                    'field' => 'Email',
+                    'operator' => 'does not contain',
+                    'value' => 'nonexistent',
+                    'logicOperator' => 'AND'
+                }
+            }
+        );
+        
+        System.assert(resultNotContain.records.size() > 0, 'Should find records with does not contain filter');
+    
+        // Test multiple filters with AND
+        RelatedListController.RelatedListWrapper resultMultiple = RelatedListController.getRecords(
+            'Contact',
+            'AccountId',
+            testAccount.Id,
+            new List<String>{'LastName', 'Email'},
+            10,
+            1,
+            '',
+            new List<String>(),
+            new List<Map<String, String>>{
+                new Map<String, String>{
+                    'field' => 'LastName',
+                    'operator' => 'LIKE',
+                    'value' => 'Test',
+                    'logicOperator' => 'AND'
+                },
+                new Map<String, String>{
+                    'field' => 'Email',
+                    'operator' => 'does not contain',
+                    'value' => 'nonexistent',
+                    'logicOperator' => 'AND'
+                }
+            }
+        );
+        
+        System.assert(resultMultiple != null, 'Should handle multiple filters');
+    
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testFilterOperators() {
+        Account testAccount = [SELECT Id FROM Account LIMIT 1];
+        
+        Test.startTest();
+        
+        // Test starts with operator
+        RelatedListController.RelatedListWrapper resultStarts = RelatedListController.getRecords(
+            'Contact',
+            'AccountId',
+            testAccount.Id,
+            new List<String>{'LastName', 'Email'},
+            10,
+            1,
+            '',
+            new List<String>(),
+            new List<Map<String, String>>{
+                new Map<String, String>{
+                    'field' => 'LastName',
+                    'operator' => 'STARTS',
+                    'value' => 'Test',
+                    'logicOperator' => 'AND'
+                }
+            }
+        );
+        
+        System.assert(resultStarts != null, 'Should handle starts with operator');
+    
+        // Test ends with operator
+        RelatedListController.RelatedListWrapper resultEnds = RelatedListController.getRecords(
+            'Contact',
+            'AccountId',
+            testAccount.Id,
+            new List<String>{'LastName', 'Email'},
+            10,
+            1,
+            '',
+            new List<String>(),
+            new List<Map<String, String>>{
+                new Map<String, String>{
+                    'field' => 'LastName',
+                    'operator' => 'ENDS',
+                    'value' => 'Contact',
+                    'logicOperator' => 'AND'
+                }
+            }
+        );
+        
+        System.assert(resultEnds != null, 'Should handle ends with operator');
+    
+        Test.stopTest();
+    }
+    
+    @isTest
+    static void testFilterWithInvalidInputs() {
+        Account testAccount = [SELECT Id FROM Account LIMIT 1];
+        
+        Test.startTest();
+        
+        try {
+            // Test with invalid operator
+            RelatedListController.RelatedListWrapper result = RelatedListController.getRecords(
+                'Contact',
+                'AccountId',
+                testAccount.Id,
+                new List<String>{'LastName', 'Email'},
+                10,
+                1,
+                '',
+                new List<String>(),
+                new List<Map<String, String>>{
+                    new Map<String, String>{
+                        'field' => 'LastName',
+                        'operator' => 'INVALID_OPERATOR',
+                        'value' => 'Test',
+                        'logicOperator' => 'AND'
+                    }
+                }
+            );
+            
+            System.assert(false, 'Should throw exception for invalid operator');
+        } catch (Exception e) {
+            System.assert(true, 'Expected exception for invalid operator');
+        }
+    
+        // Test with empty filters list
+        RelatedListController.RelatedListWrapper resultEmpty = RelatedListController.getRecords(
+            'Contact',
+            'AccountId',
+            testAccount.Id,
+            new List<String>{'LastName', 'Email'},
+            10,
+            1,
+            '',
+            new List<String>(),
+            new List<Map<String, String>>()
+        );
+        
+        System.assert(resultEmpty != null, 'Should handle empty filters list');
+    
+        Test.stopTest();
+    }
+
+
+
+
+
+
+
 }

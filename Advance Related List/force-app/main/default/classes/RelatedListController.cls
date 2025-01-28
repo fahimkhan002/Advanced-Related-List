@@ -157,7 +157,8 @@ public with sharing class RelatedListController {
         Integer pageSize,
         Integer pageNumber,
         String searchTerm,
-        List<String> searchableFields
+        List<String> searchableFields,
+        List<Map<String, String>> filters
     ) {
         try {
             // Security checks
@@ -180,7 +181,8 @@ public with sharing class RelatedListController {
                 parentLookupField, 
                 parentId, 
                 searchTerm, 
-                searchableFields
+                searchableFields,
+                filters
             );
 
             // Get total record count
@@ -366,11 +368,13 @@ public with sharing class RelatedListController {
         String parentLookupField,
         String parentId,
         String searchTerm,
-        List<String> searchableFields
+        List<String> searchableFields,
+        List<Map<String, String>> filters
     ) {
         String whereClause = String.escapeSingleQuotes(parentLookupField) + 
                         ' = \'' + String.escapeSingleQuotes(parentId) + '\'';
 
+        // Add search conditions
         if (String.isNotBlank(searchTerm) && searchableFields != null && !searchableFields.isEmpty()) {
             List<String> searchConditions = new List<String>();
             String searchValue = '%' + String.escapeSingleQuotes(searchTerm) + '%';
@@ -381,6 +385,49 @@ public with sharing class RelatedListController {
             
             if (!searchConditions.isEmpty()) {
                 whereClause += ' AND (' + String.join(searchConditions, ' OR ') + ')';
+            }
+        }
+
+        // Add filter conditions
+        if (filters != null && !filters.isEmpty()) {
+            List<String> filterConditions = new List<String>();
+            
+            for (Map<String, String> filter : filters) {
+                String field = String.escapeSingleQuotes(filter.get('field'));
+                String operator = filter.get('operator');
+                String value = String.escapeSingleQuotes(filter.get('value'));
+                
+                if (String.isNotBlank(field) && String.isNotBlank(value)) {
+                    String condition = '';
+                    switch on operator {
+                        when 'LIKE' {
+                            condition = field + ' LIKE \'%' + value + '%\'';
+                        }
+                        when 'does not contain' {
+                            // Correct SOQL syntax using NOT() with parentheses
+                            condition = '(NOT(' + field + ' LIKE \'%' + value + '%\'))';
+                        }
+                        when 'STARTS' {
+                            condition = field + ' LIKE \'' + value + '%\'';
+                        }
+                        when 'ENDS' {
+                            condition = field + ' LIKE \'%' + value + '\'';
+                        }
+                        when else {
+                            condition = field + ' ' + operator + ' \'' + value + '\'';
+                        }
+                    }
+                    filterConditions.add(condition);
+                }
+            }
+            
+            if (!filterConditions.isEmpty()) {
+                String combinedFilters = filterConditions[0];
+                for (Integer i = 1; i < filterConditions.size(); i++) {
+                    String currentOperator = filters[i].get('logicOperator');
+                    combinedFilters += ' ' + (currentOperator == null ? 'AND' : currentOperator) + ' ' + filterConditions[i];
+                }
+                whereClause += ' AND (' + combinedFilters + ')';
             }
         }
 

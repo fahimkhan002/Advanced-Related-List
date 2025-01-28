@@ -40,6 +40,24 @@ A flexible Lightning Web Component that provides an enhanced related list experi
 - 🔄 Flow integration
 - 🏠 Support for compound fields (like MailingAddress)
 
+
+## New Feature: Advanced Filtering
+The component now supports advanced filtering capabilities with the following operators:
+- Contains (LIKE)
+- Does Not Contain (NOT LIKE)
+- Starts With
+- Ends With
+- Equals
+- Not Equal To
+- Greater Than
+- Less Than
+
+### Filter Combinations
+- Multiple filters can be combined using AND/OR operators
+- Filters can be dynamically added or removed
+- Each filter condition can be modified independently
+
+
 ## Component Configuration
 
 ### Required Properties

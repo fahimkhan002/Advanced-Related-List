@@ -1,36 +1,52 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Production-safe manifest for Advanced Related List v2. Excludes the sandbox-only fixtures/ directory. -->
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
-        <members>*</members>
+        <members>RelatedListController</members>
+        <members>RelatedListControllerTest</members>
+        <members>RelatedListDefinitions</members>
+        <members>RelatedListException</members>
+        <members>RelatedListQueryBuilder</members>
+        <members>RelatedListQueryBuilderTest</members>
+        <members>RelatedListSchemaService</members>
+        <members>RelatedListService</members>
+        <members>RelatedListTestData</members>
         <name>ApexClass</name>
     </types>
     <types>
-        <members>*</members>
-        <name>ApexComponent</name>
+        <members>Advanced_Related_List__mdt</members>
+        <members>Advanced_Related_List_Column__mdt</members>
+        <name>CustomObject</name>
     </types>
     <types>
-        <members>*</members>
-        <name>ApexPage</name>
+        <members>Advanced_Related_List.Account_Contacts</members>
+        <members>Advanced_Related_List_Column.AC_Birthdate</members>
+        <members>Advanced_Related_List_Column.AC_Email</members>
+        <members>Advanced_Related_List_Column.AC_Lead_Source</members>
+        <members>Advanced_Related_List_Column.AC_Mailing_Address</members>
+        <members>Advanced_Related_List_Column.AC_Mailing_City</members>
+        <members>Advanced_Related_List_Column.AC_Name</members>
+        <members>Advanced_Related_List_Column.AC_Owner_Name</members>
+        <members>Advanced_Related_List_Column.AC_Phone</members>
+        <members>Advanced_Related_List_Column.AC_Title</members>
+        <name>CustomMetadata</name>
     </types>
     <types>
-        <members>*</members>
-        <name>ApexTestSuite</name>
+        <members>Advanced_Related_List_Bulk_Delete</members>
+        <name>CustomPermission</name>
     </types>
     <types>
-        <members>*</members>
-        <name>ApexTrigger</name>
-    </types>
-    <types>
-        <members>*</members>
-        <name>AuraDefinitionBundle</name>
-    </types>
-    <types>
-        <members>*</members>
+        <members>advanceRelatedList</members>
+        <members>arlEditModal</members>
+        <members>arlFlowModal</members>
+        <members>arlUtils</members>
+        <members>filterPanel</members>
         <name>LightningComponentBundle</name>
     </types>
     <types>
-        <members>*</members>
-        <name>StaticResource</name>
+        <members>Advanced_Related_List_Bulk_Delete</members>
+        <members>Advanced_Related_List_User</members>
+        <name>PermissionSet</name>
     </types>
-    <version>62.0</version>
+    <version>67.0</version>
 </Package>

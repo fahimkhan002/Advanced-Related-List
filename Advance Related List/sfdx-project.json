@@ -3,10 +3,14 @@
     {
       "path": "force-app",
       "default": true
+    },
+    {
+      "path": "fixtures",
+      "default": false
     }
   ],
   "name": "Advance Related List",
   "namespace": "",
   "sfdcLoginUrl": "https://login.salesforce.com",
-  "sourceApiVersion": "62.0"
+  "sourceApiVersion": "67.0"
 }

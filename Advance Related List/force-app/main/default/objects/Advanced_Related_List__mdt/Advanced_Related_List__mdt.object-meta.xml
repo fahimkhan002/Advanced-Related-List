@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Admin-maintained, deployable definition of an Advanced Related List (data scope, columns and allowed actions). Selected on a Lightning page by its DeveloperName (List Definition Key).</description>
+    <label>Advanced Related List</label>
+    <pluralLabel>Advanced Related Lists</pluralLabel>
+    <visibility>Public</visibility>
+</CustomObject>

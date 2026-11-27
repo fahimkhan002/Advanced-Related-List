@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <classAccesses>
+        <apexClass>RelatedListController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <description>Runtime access to the Advanced Related List component. Grants no object, field or record access: assign business-object permissions separately.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Advanced Related List User</label>
+</PermissionSet>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allow_Bulk_Delete__c</fullName>
+    <defaultValue>false</defaultValue>
+    <externalId>false</externalId>
+    <fieldManageability>SubscriberControlled</fieldManageability>
+    <inlineHelpText>Allow deleting several selected rows at once. Users also need the Advanced Related List Bulk Delete permission set.</inlineHelpText>
+    <label>Allow Bulk Delete</label>
+    <type>Checkbox</type>
+</CustomField>

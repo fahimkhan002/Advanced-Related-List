@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Advanced_Related_List_Bulk_Delete</name>
+    </customPermissions>
+    <description>Optional privileged action: bulk delete from Advanced Related Lists whose definition allows it. Assign together with Advanced Related List User.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Advanced Related List Bulk Delete</label>
+</PermissionSet>

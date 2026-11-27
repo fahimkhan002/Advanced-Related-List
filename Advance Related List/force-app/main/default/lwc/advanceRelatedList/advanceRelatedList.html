@@ -36,23 +36,45 @@
                         onclick={handleToggleFilters}
                     ></lightning-button-icon-stateful>
                 </template>
-                <lightning-button-group class="slds-m-left_x-small">
-                    <template lwc:if={hasFlow}>
-                        <lightning-button data-id="flow" label={flowTitle} icon-name="utility:flow" onclick={handleRunFlow}></lightning-button>
-                    </template>
-                    <template lwc:if={canCreate}>
-                        <lightning-button data-id="new" label="New" onclick={handleNew}></lightning-button>
-                    </template>
-                    <template lwc:if={canBulkDelete}>
-                        <lightning-button
-                            data-id="bulk-delete"
-                            label={bulkDeleteLabel}
-                            variant="destructive-text"
-                            disabled={bulkDeleteDisabled}
-                            onclick={handleBulkDelete}
-                        ></lightning-button>
-                    </template>
-                </lightning-button-group>
+                <!-- Header actions in the admin's order, joined like the standard record actions,
+                     with the overflow as a ▾ menu at the end of the same group. -->
+                <template lwc:if={hasHeaderGroup}>
+                    <lightning-button-group class="arl-header-actions" data-id="header-actions">
+                        <template for:each={headerButtons} for:item="action">
+                            <lightning-button
+                                key={action.key}
+                                data-id={action.dataId}
+                                data-key={action.dataKey}
+                                label={action.displayLabel}
+                                onclick={handleHeaderAction}
+                            ></lightning-button>
+                        </template>
+                        <template lwc:if={canBulkDelete}>
+                            <lightning-button
+                                data-id="bulk-delete"
+                                label={bulkDeleteLabel}
+                                variant="destructive-text"
+                                disabled={bulkDeleteDisabled}
+                                onclick={handleBulkDelete}
+                            ></lightning-button>
+                        </template>
+                        <template lwc:if={hasHeaderMenu}>
+                            <lightning-button-menu
+                                data-id="more-actions"
+                                alternative-text="More actions"
+                                title="More actions"
+                                icon-name="utility:down"
+                                variant="border-filled"
+                                menu-alignment="right"
+                                onselect={handleHeaderMenuAction}
+                            >
+                                <template for:each={headerMenuActions} for:item="action">
+                                    <lightning-menu-item key={action.key} value={action.key} label={action.displayLabel}></lightning-menu-item>
+                                </template>
+                            </lightning-button-menu>
+                        </template>
+                    </lightning-button-group>
+                </template>
                 <lightning-button-icon
                     class="slds-m-left_x-small"
                     data-id="refresh"
@@ -95,7 +117,13 @@
                     </template>
                 </ul>
                 <lightning-button variant="base" data-id="clear-all" class="slds-m-left_x-small" label="Clear all" onclick={handleClearAll}></lightning-button>
+                <template lwc:if={showRememberedNote}>
+                    <span class="slds-text-body_small slds-text-color_weak slds-m-left_small" data-id="remembered">Kept for your next visit</span>
+                </template>
             </div>
+        </template>
+        <template lwc:if={rememberNotice}>
+            <p class="slds-p-horizontal_medium slds-p-bottom_x-small slds-text-body_small slds-text-color_weak" role="status" data-id="remember-notice">{rememberNotice}</p>
         </template>
 
         <div class="slds-card__body slds-card__body_inner arl-body" aria-busy={ariaBusy}>

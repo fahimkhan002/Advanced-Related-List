@@ -100,7 +100,7 @@ public with sharing class RelatedListQueryBuilder {
         if (filters.size() > MAX_FILTERS) {
             throw RelatedListException.input('Use up to ' + MAX_FILTERS + ' filters.');
         }
-        String join = 'OR'.equalsIgnoreCase(logic) ? ' OR ' : ' AND ';
+        String joiner = 'OR'.equalsIgnoreCase(logic) ? ' OR ' : ' AND ';
         List<String> conditions = new List<String>();
         for (RelatedListController.FilterInput filter : filters) {
             if (filter == null) {
@@ -109,8 +109,8 @@ public with sharing class RelatedListQueryBuilder {
             conditions.add(condition(filter));
             fingerprintParts.add('f:' + filter.columnKey + ':' + filter.operator + ':' + filter.value);
         }
-        fingerprintParts.add('j:' + join.trim());
-        scope.add('(' + String.join(conditions, join) + ')');
+        fingerprintParts.add('j:' + joiner.trim());
+        scope.add('(' + String.join(conditions, joiner) + ')');
     }
 
     private String condition(RelatedListController.FilterInput filter) {

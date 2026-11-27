@@ -43,6 +43,7 @@ public with sharing class RelatedListSchemaService {
         public String childObject;
         public String parentObject;
         public Id parentId;
+        public Schema.SObjectType parentType;
         public String lookupField;
         public List<ResolvedColumn> columns = new List<ResolvedColumn>();
         public Map<String, ResolvedColumn> byKey = new Map<String, ResolvedColumn>();
@@ -93,16 +94,29 @@ public with sharing class RelatedListSchemaService {
      * @return resolved list
      */
     public static ResolvedList resolve(RelatedListDefinitions.ListSpec spec, String parentIdValue) {
+        Id parentId = parseParentId(parentIdValue);
+        ResolvedList rl = resolveForParentType(spec, parentId.getSObjectType());
+        rl.parentId = parentId;
+        return rl;
+    }
+
+    /**
+     * @description Validates a spec for a parent object type without a record (used by the admin
+     *              builder). Applies exactly the same rules as the runtime path for the running user.
+     * @param spec unvalidated spec
+     * @param parentType parent object type
+     * @return resolved list (parentId is null)
+     */
+    public static ResolvedList resolveForParentType(RelatedListDefinitions.ListSpec spec, Schema.SObjectType parentType) {
         ResolvedList rl = new ResolvedList();
         rl.spec = spec;
-        rl.parentId = parseParentId(parentIdValue);
+        rl.parentType = parentType;
 
         rl.childDescribe = describeObject(spec.childObject, 'Child object');
         rl.childObject = rl.childDescribe.getName();
         if (!rl.childDescribe.isAccessible()) {
             throw RelatedListException.access('You don\'t have access to ' + rl.childDescribe.getLabelPlural() + '.');
         }
-        Schema.SObjectType parentType = rl.parentId.getSObjectType();
         rl.parentObject = parentType.getDescribe(SObjectDescribeOptions.DEFERRED).getName();
         if (spec.mode == RelatedListDefinitions.MODE_DEFINITION) {
             Schema.DescribeSObjectResult configuredParent = describeObject(spec.parentObject, 'Parent object');
@@ -153,7 +167,7 @@ public with sharing class RelatedListSchemaService {
         }
         Boolean targetsParent = false;
         for (Schema.SObjectType target : dfr.getReferenceTo()) {
-            if (target == rl.parentId.getSObjectType()) {
+            if (target == rl.parentType) {
                 targetsParent = true;
             }
         }
@@ -220,10 +234,9 @@ public with sharing class RelatedListSchemaService {
             }
         }
 
-        Boolean canFilter = dfr.isFilterable() && !col.compound;
-        col.searchable = capability(cs.searchable, canFilter && SEARCH_TYPES.contains(col.displayType), cs, 'searched');
-        col.filterable = capability(cs.filterable, canFilter && col.filterType != null, cs, 'filtered');
-        col.sortable = capability(cs.sortable, canFilter && dfr.isSortable() && SORT_TYPES.contains(col.displayType), cs, 'sorted');
+        col.searchable = capability(cs.searchable, supportsSearch(dfr), cs, 'searched');
+        col.filterable = capability(cs.filterable, supportsFilter(dfr), cs, 'filtered');
+        col.sortable = capability(cs.sortable, supportsSort(dfr), cs, 'sorted');
         if (cs.editable == true) {
             if (fp.depth > 0) {
                 throw RelatedListException.config('Field "' + cs.fieldPath + '" belongs to a related record and cannot be edited from this list.');
@@ -232,6 +245,39 @@ public with sharing class RelatedListSchemaService {
             col.editable = dfr.isUpdateable();
         }
         return col;
+    }
+
+    // ===== CAPABILITY RULES (shared by runtime and the admin builder) =====
+
+    private static Boolean isCompound(Schema.DescribeFieldResult dfr) {
+        return dfr.getType() == Schema.DisplayType.ADDRESS || dfr.getType() == Schema.DisplayType.LOCATION;
+    }
+
+    /**
+     * @description Whether a field can be used in the search box.
+     * @param dfr field describe
+     * @return true when supported
+     */
+    public static Boolean supportsSearch(Schema.DescribeFieldResult dfr) {
+        return dfr.isFilterable() && !isCompound(dfr) && SEARCH_TYPES.contains(dfr.getType());
+    }
+
+    /**
+     * @description Whether a field can be offered in the filter panel.
+     * @param dfr field describe
+     * @return true when supported
+     */
+    public static Boolean supportsFilter(Schema.DescribeFieldResult dfr) {
+        return dfr.isFilterable() && !isCompound(dfr) && dfr.getType() != Schema.DisplayType.REFERENCE && filterTypeFor(dfr.getType()) != null;
+    }
+
+    /**
+     * @description Whether the whole list can be sorted by a field.
+     * @param dfr field describe
+     * @return true when supported
+     */
+    public static Boolean supportsSort(Schema.DescribeFieldResult dfr) {
+        return dfr.isFilterable() && dfr.isSortable() && !isCompound(dfr) && SORT_TYPES.contains(dfr.getType());
     }
 
     private static Boolean capability(Boolean requested, Boolean supported, RelatedListDefinitions.ColumnSpec cs, String verb) {
@@ -268,7 +314,7 @@ public with sharing class RelatedListSchemaService {
             return; // user cannot read the default sort field: deterministic Id order instead
         }
         Schema.DescribeFieldResult dfr = fp.field;
-        if (!(dfr.isSortable() && dfr.isFilterable() && SORT_TYPES.contains(dfr.getType()))) {
+        if (!supportsSort(dfr)) {
             if (legacy) {
                 return;
             }

@@ -1,5 +1,5 @@
 /**
- * @description Aura/LWC boundary for the Advanced Related List.
+ * @description Aura/LWC boundary for the Tekenable Advance Related List.
  *
  *              Exposed endpoints (the only ones):
  *                - getRows    : scoped, paginated read of one related list
@@ -131,6 +131,28 @@ public with sharing class RelatedListController {
         }
     }
 
+    /**
+     * @description A launchable action. type: flow | quickAction. placement: list (header button,
+     *              runs for the parent record) | row (row menu, runs for that row's record).
+     *              For quick actions `target` is the navigation API name (for example Global.NewTask).
+     *              A null label means "use the list's Flow Modal Title" (legacy flow only).
+     */
+    public class ActionInfo {
+        @AuraEnabled
+        public String key;
+        @AuraEnabled
+        public String type;
+        @AuraEnabled
+        public String target;
+        @AuraEnabled
+        public String label;
+        @AuraEnabled
+        public String placement;
+        /** Header actions: button | menu | null (automatic: first two are buttons). */
+        @AuraEnabled
+        public String display;
+    }
+
     /** @description List-level context and capabilities for the running user. */
     public class ListContext {
         @AuraEnabled
@@ -155,8 +177,9 @@ public with sharing class RelatedListController {
         public Boolean canDelete;
         @AuraEnabled
         public Boolean canBulkDelete;
+        /** Flow and quick action buttons/row items the running user can launch. */
         @AuraEnabled
-        public String flowApiName;
+        public List<ActionInfo> actions;
         @AuraEnabled
         public List<String> editFields;
         @AuraEnabled

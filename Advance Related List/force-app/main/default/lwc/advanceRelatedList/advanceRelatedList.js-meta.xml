@@ -2,7 +2,7 @@
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>67.0</apiVersion>
     <isExposed>true</isExposed>
-    <masterLabel>Advanced Related List</masterLabel>
+    <masterLabel>Tekenable Advance Related List</masterLabel>
     <description>Related list with server-enforced scope, search, typed filters, full-list sorting and optional bulk delete.</description>
 
     <!-- Targets are unchanged from v1. Records are shown only where the page provides a record ID. -->
@@ -20,9 +20,10 @@
     -->
     <targetConfigs>
         <targetConfig targets="lightning__RecordPage,lightning__AppPage">
-            <property name="listDefinition" type="String" label="List Definition Key" description="DeveloperName of an Advanced Related List definition (Setup > Custom Metadata Types). When set, it controls the records, columns and actions, and the legacy fields below are ignored." />
+            <property name="listDefinition" type="String" datasource="apex://RelatedListDefinitionPicklist" label="List Definition Key" description="DeveloperName of an Tekenable Advance Related List definition (Setup > Custom Metadata Types). When set, it controls the records, columns and actions, and the legacy fields below are ignored." />
             <property name="listTitle" type="String" label="List Title" description="Title shown on the card. Blank uses the object's plural label." />
             <property name="recordsPerPage" type="Integer" label="Records Per Page" default="10" min="1" max="100" description="Rows per page (1-100)." />
+            <property name="disableSavedFilters" type="Boolean" label="Don't Keep Users' Filters and Sort" default="false" description="By default each user's filters and sort for this list are kept (in their browser) when they refresh or come back. Select to turn this off." />
             <property name="customIconName" type="String" label="Custom Icon Name" description="SLDS icon name, for example standard:contact." />
             <property name="iconBackgroundColor" type="String" label="Icon Background Color" description="Hex colour such as #1589EE. Other values are ignored." />
             <property name="flowTitle" type="String" label="Flow Modal Title" default="Run Flow" description="Label of the flow button and dialog." />
@@ -39,9 +40,10 @@
             </supportedFormFactors>
         </targetConfig>
         <targetConfig targets="lightning__HomePage">
-            <property name="listDefinition" type="String" label="List Definition Key" description="DeveloperName of an Advanced Related List definition. Home pages have no record, so the component shows a placement message." />
+            <property name="listDefinition" type="String" datasource="apex://RelatedListDefinitionPicklist" label="List Definition Key" description="DeveloperName of an Tekenable Advance Related List definition. Home pages have no record, so the component shows a placement message." />
             <property name="listTitle" type="String" label="List Title" description="Title shown on the card." />
             <property name="recordsPerPage" type="Integer" label="Records Per Page" default="10" min="1" max="100" description="Rows per page (1-100)." />
+            <property name="disableSavedFilters" type="Boolean" label="Don't Keep Users' Filters and Sort" default="false" description="By default each user's filters and sort for this list are kept (in their browser) when they refresh or come back. Select to turn this off." />
             <property name="customIconName" type="String" label="Custom Icon Name" description="SLDS icon name, for example standard:contact." />
             <property name="iconBackgroundColor" type="String" label="Icon Background Color" description="Hex colour such as #1589EE." />
             <property name="flowTitle" type="String" label="Flow Modal Title" default="Run Flow" description="Label of the flow button and dialog." />

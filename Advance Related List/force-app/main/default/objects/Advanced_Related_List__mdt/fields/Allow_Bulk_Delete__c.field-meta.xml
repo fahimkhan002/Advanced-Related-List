@@ -4,7 +4,7 @@
     <defaultValue>false</defaultValue>
     <externalId>false</externalId>
     <fieldManageability>SubscriberControlled</fieldManageability>
-    <inlineHelpText>Allow deleting several selected rows at once. Users also need the Advanced Related List Bulk Delete permission set.</inlineHelpText>
+    <inlineHelpText>Allow deleting several selected rows at once. Users also need the Tekenable Advance Related List Bulk Delete permission set.</inlineHelpText>
     <label>Allow Bulk Delete</label>
     <type>Checkbox</type>
 </CustomField>

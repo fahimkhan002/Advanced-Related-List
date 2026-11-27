@@ -4,7 +4,9 @@ import { deleteRecord } from 'lightning/uiRecordApi';
 import { encodeDefaultFieldValues } from 'lightning/pageReferenceUtils';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import LightningConfirm from 'lightning/confirm';
+import { registerRefreshHandler, unregisterRefreshHandler } from 'lightning/refresh';
 import FORM_FACTOR from '@salesforce/client/formFactor';
+import USER_ID from '@salesforce/user/Id';
 import LOCALE from '@salesforce/i18n/locale';
 import getRows from '@salesforce/apex/RelatedListController.getRows';
 import deleteRows from '@salesforce/apex/RelatedListController.deleteRows';
@@ -24,7 +26,7 @@ const ROW_ACTIONS = {
 };
 
 /**
- * Advanced Related List.
+ * Tekenable Advance Related List.
  *
  * Data comes only from RelatedListController.getRows, which re-validates the list definition (or
  * the legacy App Builder properties) for the running user on every request. The browser never
@@ -45,6 +47,9 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     @api listTitle;
     @api customIconName;
     @api iconBackgroundColor;
+    /** Set to stop keeping each user's filters and sort for this list across page refreshes. */
+    @api disableSavedFilters = false;
+    rememberNotice = '';
 
     _recordId;
     _listDefinition;
@@ -62,7 +67,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         }
     }
 
-    /** DeveloperName of an Advanced Related List definition (Custom Metadata). */
+    /** DeveloperName of an Tekenable Advance Related List definition (Custom Metadata). */
     @api
     get listDefinition() {
         return this._listDefinition;
@@ -71,6 +76,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         const changed = value !== this._listDefinition;
         this._listDefinition = value;
         if (changed && this._connected) {
+            this.restoreState();
             this.resetAndLoad();
         }
     }
@@ -114,6 +120,9 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
 
     connectedCallback() {
         this._connected = true;
+        this.restoreState();
+        // Refresh when the record page refreshes (for example after a quick action or edit saves).
+        this.refreshHandlerId = registerRefreshHandler(this, this.handlePageRefresh.bind(this));
         this.load();
     }
 
@@ -121,6 +130,113 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this._connected = false;
         clearTimeout(this.searchTimer);
         this.requestSeq++; // ignore responses that arrive after removal
+        if (this.refreshHandlerId) {
+            unregisterRefreshHandler(this.refreshHandlerId);
+        }
+    }
+
+    handlePageRefresh() {
+        return this.refresh().then(() => true);
+    }
+
+    // ===== REMEMBERED FILTERS =====
+    // Stored per user and per list (not per record) in this browser only. Values are validated by
+    // the server like any other request; anything it rejects is forgotten automatically.
+
+    restoredState = false;
+
+    get storageKey() {
+        const definition = this._listDefinition && String(this._listDefinition).trim();
+        const list = definition
+            ? `def:${definition}`
+            : `legacy:${this.childObjectApiName}:${this.parentLookupField}:${(this.fieldsToDisplay || '').replace(/\s/g, '')}`;
+        return `arl:v1:${USER_ID}:${list}`;
+    }
+
+    get rememberEnabled() {
+        return !(this.disableSavedFilters === true || this.disableSavedFilters === 'true');
+    }
+
+    readStore() {
+        try {
+            return window.localStorage;
+        } catch {
+            return null;
+        }
+    }
+
+    restoreState() {
+        this.restoredState = false;
+        if (!this.rememberEnabled) {
+            return;
+        }
+        const store = this.readStore();
+        let saved = null;
+        try {
+            saved = store ? JSON.parse(store.getItem(this.storageKey) || 'null') : null;
+        } catch {
+            saved = null;
+        }
+        if (!saved || typeof saved !== 'object') {
+            return;
+        }
+        const filters = Array.isArray(saved.filters)
+            ? saved.filters
+                  .filter((f) => f && typeof f.columnKey === 'string' && typeof f.operator === 'string')
+                  .slice(0, 20)
+                  .map((f) => ({ columnKey: f.columnKey, operator: f.operator, value: f.value === null || f.value === undefined ? null : String(f.value) }))
+            : [];
+        this.filters = filters;
+        this.filterLogic = saved.logic === 'OR' ? 'OR' : 'AND';
+        if (typeof saved.sortKey === 'string' && saved.sortKey) {
+            this.sortKey = saved.sortKey;
+            this.sortDirection = saved.sortDirection === 'desc' ? 'desc' : 'asc';
+            this.userSorted = true;
+        }
+        this.restoredState = filters.length > 0 || this.userSorted;
+    }
+
+    persistState() {
+        if (!this.rememberEnabled) {
+            return;
+        }
+        const store = this.readStore();
+        if (!store) {
+            return;
+        }
+        try {
+            if (!this.filters.length && !this.userSorted) {
+                store.removeItem(this.storageKey);
+                return;
+            }
+            store.setItem(
+                this.storageKey,
+                JSON.stringify({
+                    filters: this.filters.map((f) => ({ columnKey: f.columnKey, operator: f.operator, value: f.value })),
+                    logic: this.filterLogic,
+                    sortKey: this.userSorted ? this.sortKey : null,
+                    sortDirection: this.userSorted ? this.sortDirection : null
+                })
+            );
+        } catch {
+            // storage full or blocked: the list still works, it just won't remember
+        }
+    }
+
+    forgetState() {
+        const store = this.readStore();
+        try {
+            if (store) {
+                store.removeItem(this.storageKey);
+            }
+        } catch {
+            // ignore
+        }
+        this.restoredState = false;
+    }
+
+    get showRememberedNote() {
+        return this.rememberEnabled && (this.filters.length > 0 || this.userSorted);
     }
 
     // ===== PUBLIC API =====
@@ -202,6 +318,19 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     }
 
     applyResponse(response) {
+        if (response && response.status === 'INPUT_ERROR' && this.restoredState) {
+            // Remembered filters or sort no longer fit this list (an admin changed it): forget them.
+            this.forgetState();
+            this.filters = [];
+            this.filterLogic = 'AND';
+            this.userSorted = false;
+            this.sortKey = undefined;
+            this.sortDirection = undefined;
+            this.rememberNotice = 'Your saved filters no longer match this list, so they were cleared.';
+            this.resetAndLoad();
+            return;
+        }
+        this.restoredState = false;
         this.status = response ? response.status : 'ERROR';
         this.message = response ? response.message : 'Something went wrong. Try again.';
         if (this.status !== STATUS_OK) {
@@ -318,8 +447,64 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         return Boolean(this.context && this.context.canBulkDelete) && !this.isSmall;
     }
 
-    get hasFlow() {
-        return Boolean(this.context && this.context.flowApiName);
+    // ----- configured actions (flows and quick actions) -----
+
+    get configuredActions() {
+        return (this.context && this.context.actions) || [];
+    }
+
+    actionLabel(action) {
+        if (action.label) {
+            return action.label;
+        }
+        return action.type === 'flow' ? this.flowTitle || 'Run Flow' : action.target;
+    }
+
+    get listActions() {
+        const icons = { flow: 'utility:flow', quickAction: 'utility:quick_text' };
+        return this.configuredActions
+            .filter((a) => a.placement === 'list')
+            .map((a) => ({
+                ...a,
+                displayLabel: this.actionLabel(a),
+                dataKey: a.key,
+                dataId: a.type === 'standard' ? 'new' : 'header-action',
+                iconName: icons[a.type]
+            }));
+    }
+
+    /**
+     * Header actions in the admin's order. Each is a button or a More-menu item as configured;
+     * actions without a choice follow the original rule (the first two are buttons).
+     */
+    get headerLayout() {
+        const buttons = [];
+        const menu = [];
+        this.listActions.forEach((a) => {
+            const asButton = a.display === 'button' || (a.display !== 'menu' && buttons.length < 2);
+            (asButton ? buttons : menu).push(a);
+        });
+        return { buttons, menu };
+    }
+
+    get headerButtons() {
+        return this.headerLayout.buttons;
+    }
+
+    get headerMenuActions() {
+        return this.headerLayout.menu;
+    }
+
+    get hasHeaderMenu() {
+        return this.headerMenuActions.length > 0;
+    }
+
+    get hasHeaderGroup() {
+        return this.headerButtons.length > 0 || this.hasHeaderMenu || this.canBulkDelete;
+    }
+
+    get rowCustomActions() {
+        return this.configuredActions.filter((a) => a.placement === 'row').map((a) => ({ label: this.actionLabel(a), name: `action:${a.key}` }));
     }
 
     get bulkDeleteLabel() {
@@ -480,7 +665,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         if (this.context.canDelete) {
             actions.push(ROW_ACTIONS.delete);
         }
-        return actions;
+        return [...actions, ...this.rowCustomActions];
     }
 
     get datatableSortedBy() {
@@ -603,6 +788,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.filters = event.detail.filters;
         this.filterLogic = event.detail.logic === 'OR' ? 'OR' : 'AND';
         this.showFilters = false;
+        this.rememberNotice = '';
+        this.persistState();
         this.resetAndLoad();
         this.focusFilterButton();
     }
@@ -615,6 +802,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
     handleRemoveFilter(event) {
         const index = Number(event.currentTarget.dataset.index);
         this.filters = this.filters.filter((_, i) => i !== index);
+        this.persistState();
         this.resetAndLoad();
         this.focusFilterButton();
     }
@@ -626,6 +814,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.appliedSearch = '';
         this.searchInput = '';
         this.showFilters = false;
+        this.rememberNotice = '';
+        this.persistState();
         this.resetAndLoad();
         const search = this.template.querySelector('[data-id="search"]');
         if (search) {
@@ -657,6 +847,7 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.sortKey = key;
         this.sortDirection = direction === 'desc' ? 'desc' : 'asc';
         this.userSorted = true;
+        this.persistState();
         this.resetAndLoad();
     }
 
@@ -751,6 +942,8 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
             this.editRecord(recordId);
         } else if (action === 'delete') {
             this.deleteOne(recordId);
+        } else if (action && action.startsWith('action:')) {
+            this.launchAction(action.slice('action:'.length), recordId);
         }
     }
 
@@ -854,16 +1047,47 @@ export default class AdvanceRelatedList extends NavigationMixin(LightningElement
         this.rowErrors = [];
     }
 
-    async handleRunFlow() {
+    handleHeaderAction(event) {
+        this.launchAction(event.currentTarget.dataset.key, this._recordId);
+    }
+
+    handleHeaderMenuAction(event) {
+        this.launchAction(event.detail.value, this._recordId);
+    }
+
+    /**
+     * Runs a configured action. Header actions run for the record page's record, row actions for
+     * that row's record; the record ID is passed to flows as the text input variable recordId.
+     */
+    async launchAction(key, recordId) {
+        const action = this.configuredActions.find((a) => a.key === key);
+        if (!action) {
+            return;
+        }
+        if (action.type === 'standard') {
+            this.handleNew();
+            return;
+        }
+        const label = this.actionLabel(action);
+        if (action.type === 'quickAction') {
+            // The quick action opens in Salesforce's own dialog; the page refresh it triggers
+            // reaches this list through the registered refresh handler.
+            this[NavigationMixin.Navigate]({
+                type: 'standard__quickAction',
+                attributes: { apiName: action.target },
+                state: { recordId }
+            });
+            return;
+        }
         const result = await FlowModal.open({
             size: 'medium',
-            label: this.flowTitle || 'Run Flow',
-            heading: this.flowTitle || 'Run Flow',
-            flowApiName: this.context.flowApiName,
-            inputVariables: [{ name: 'recordId', type: 'String', value: this._recordId }]
+            label,
+            heading: label,
+            flowApiName: action.target,
+            inputVariables: [{ name: 'recordId', type: 'String', value: recordId }]
         });
         if (result === 'finished') {
-            this.toast('Done', 'The flow finished.', 'success');
+            this.toast('Done', `${label} finished.`, 'success');
             await this.refresh();
         } else if (result === 'error') {
             this.toast('The flow stopped', 'The flow ran into a problem. Contact your Salesforce administrator.', 'error');

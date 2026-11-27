@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Placement__c</fullName>
+    <externalId>false</externalId>
+    <fieldManageability>SubscriberControlled</fieldManageability>
+    <inlineHelpText>List: a button in the list header that runs for the record page's record. Row: an item in each row's menu that runs for that row's record.</inlineHelpText>
+    <label>Placement</label>
+    <required>true</required>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>List</fullName>
+                <default>true</default>
+                <label>List header button</label>
+            </value>
+            <value>
+                <fullName>Row</fullName>
+                <default>false</default>
+                <label>Row menu item</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

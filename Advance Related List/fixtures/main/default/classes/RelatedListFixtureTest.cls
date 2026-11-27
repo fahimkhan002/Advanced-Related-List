@@ -38,8 +38,8 @@ private class RelatedListFixtureTest {
         Id accountA = fixtureAccount('Fixture A').Id;
         RelatedListController.ListResponse primary = RelatedListController.getRows(RelatedListTestData.request('ARL_Fixture_Primary', accountA, 10));
         RelatedListController.ListResponse secondary = RelatedListController.getRows(RelatedListTestData.request('ARL_Fixture_Secondary', accountA, 10));
-        Assert.areEqual(RelatedListController.STATUS_OK, primary.status, primary.message);
-        Assert.areEqual(RelatedListController.STATUS_OK, secondary.status, secondary.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, primary.status, 'message: ' + primary.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, secondary.status, 'message: ' + secondary.message);
         Assert.areEqual(new Set<String>{ 'Primary only', 'Both A' }, names(primary));
         Assert.areEqual(new Set<String>{ 'Both A', 'Secondary only' }, names(secondary));
     }
@@ -62,7 +62,7 @@ private class RelatedListFixtureTest {
     static void customParentRelationshipAndTypedValues() {
         ARL_Fixture_Parent__c parent = [SELECT Id FROM ARL_Fixture_Parent__c LIMIT 1];
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request('ARL_Fixture_Custom_Parent', parent.Id, 10));
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(2, res.totalCount);
         Map<String, Object> first = res.rows[0]; // Due_Date__c ASC NULLS LAST => 'Primary only' first
         Assert.areEqual('Primary only', first.get('FXC_Name'));
@@ -83,7 +83,7 @@ private class RelatedListFixtureTest {
         req.filters.add(RelatedListTestData.filter('FXC_Amount', 'greaterThan', '1'));
         req.filters.add(RelatedListTestData.filter('FXC_Is_Open', 'equals', 'true'));
         RelatedListController.ListResponse res = RelatedListController.getRows(req);
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(1, res.totalCount);
     }
 }

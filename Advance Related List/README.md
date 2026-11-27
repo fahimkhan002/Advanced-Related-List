@@ -1,14 +1,30 @@
-# Advanced Related List (v2)
+# Tekenable Advance Related List (v2)
 
 A Lightning Web Component that shows one related list on a record page. It adds search, typed filters with AND/OR, sorting of the whole list, paging, and optional bulk delete and screen-flow launch. All data scope is enforced on the server for the running user.
 
 > **v2 is a security and architecture upgrade of v1.** Existing pages keep working through a read-compatible legacy path. Some actions need an admin-maintained *list definition*; see [Migrating from v1](#migrating-from-v1). The design decision record is [docs/designs/ADR-001-advanced-related-list-v2.md](docs/designs/ADR-001-advanced-related-list-v2.md).
 
+## Install
+
+The package is an unlocked package with no namespace. Version **2.0.0-1** (beta) is ready for **sandboxes, scratch orgs and Developer Edition orgs**:
+
+- Sandbox: https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
+- Developer Edition / other non-production login: https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
+- CLI: `sf package install --package 04tdM000000fjIvQAI --target-org <alias> --wait 20`
+
+A beta version can't be installed in production. A released (promoted) version will be added here for production installs.
+
+After installing, assign the permission sets (see [Permissions](#permissions)) and follow the **[User Guide](docs/user-guide/README.md)**, which shows every step with screenshots for end users and admins.
+
+API names stay the same as earlier versions (`Advanced_Related_List__mdt`, `c-advance-related-list`, `Advanced_Related_List_User`), so existing pages and deployments keep working. Only the labels shown in Salesforce changed.
+
 ## Contents
 
+- [User Guide (with screenshots)](docs/user-guide/README.md)
 - [When to use this instead of the standard component](#when-to-use-this-instead-of-the-standard-component)
 - [Quick setup (Account → Contacts)](#quick-setup-account--contacts)
 - [Permissions](#permissions)
+- [Related List Builder (admin UI)](#tekenable-related-list-builder-admin-ui)
 - [List definitions](#list-definitions)
 - [Page placement and App Builder properties](#page-placement-and-app-builder-properties)
 - [Supported objects and field types](#supported-objects-and-field-types)
@@ -34,10 +50,10 @@ Start with the standard **Dynamic Related List – Single** component in Lightni
 
 ## Quick setup (Account → Contacts)
 
-1. Deploy the package (see [Deployment](#deployment)). It includes the example definition **Account_Contacts**.
-2. Assign the **Advanced Related List User** permission set to the users who will see the list. Optionally also assign **Advanced Related List Bulk Delete**.
+1. Install the package (see [Install](#install)) or deploy the source (see [Deployment](#deployment)). It includes the example definition **Account_Contacts**.
+2. Assign the **Tekenable Advance Related List User** permission set to the users who will see the list. Optionally also assign **Tekenable Advance Related List Bulk Delete**.
 3. Open an Account record and click **Edit Page**.
-4. Drag **Advanced Related List** onto the page and set **List Definition Key** to `Account_Contacts`.
+4. Drag **Tekenable Advance Related List** onto the page and set **List Definition Key** to `Account_Contacts`.
 5. Save and activate the page.
 
 The list shows the account's contacts with Name, Title, Email, Phone, Lead Source, Birthdate, Mailing Address and Contact Owner. Users can search Name, Title, Email, Phone and Mailing City (a hidden column). They can filter by Title, Email, Phone, Lead Source, Birthdate and Mailing City, and sort by Name, Title, Email, Birthdate and Contact Owner.
@@ -48,20 +64,42 @@ The component grants **no** access to data. Every query and delete runs in user 
 
 | Permission set | Contents | Assign to |
 |---|---|---|
-| **Advanced Related List User** | Apex class access to `RelatedListController` | Everyone who sees the component |
-| **Advanced Related List Bulk Delete** | Custom permission `Advanced_Related_List_Bulk_Delete` | Only users allowed to delete several rows at once |
+| **Tekenable Advance Related List User** | Apex class access to `RelatedListController` | Everyone who sees the component |
+| **Tekenable Advance Related List Bulk Delete** | Custom permission `Advanced_Related_List_Bulk_Delete` | Only users allowed to delete several rows at once |
+| **Tekenable Advance Related List Admin** | Custom permission `Advanced_Related_List_Admin`, Tekenable Related List Builder tab and class access | Admins who maintain list definitions (they also need Customize Application) |
 
 Assign business-object permissions separately and as usual: Read on the parent and child objects, field-level security on the fields shown, and Create, Edit or Delete on the child object for those actions. Each action appears only when **both** the definition allows it **and** the user has the matching permission. Hiding a button never grants or removes access. Users can still do whatever their permissions allow through the standard UI.
 
 Fields the user can't read are left out of the list, and a short notice says so. If the user can't read the parent record, the child object or the lookup field, the list shows an access message and returns no rows. The message is the same whether the record doesn't exist or isn't shared with the user.
 
+## Tekenable Related List Builder (admin UI)
+
+Admins create and maintain definitions without editing source or typing API names. The design is in [ADR-002](docs/designs/ADR-002-related-list-builder.md).
+
+1. Assign the **Tekenable Advance Related List Admin** permission set. Saving also needs **Customize Application**.
+2. Open **App Launcher → Tekenable Related List Builder**.
+3. Click **New related list** (or choose a list on the left) and fill in the steps:
+   - **Details:** a label. The API name (List Definition Key) is suggested from it and can't change after saving.
+   - **Records to show:** pick the record page object, then the related records. Each option is one lookup, for example *Opportunities (via Account ID)*.
+   - **Columns:** **Add column** opens a field picker. Use **›** to follow a lookup, for example *Opportunity Owner › Full Name*. Set the label, choose Show, Search, Filter, Sort or Edit (options the field type can't support are disabled), and reorder or remove columns.
+   - **Default order** and **Row actions** (Edit, Delete, Delete selected rows).
+   - **Buttons and row menu items:** New plus any number of screen flows and quick actions (up to 10). Use the arrows to set the exact header order (New can go first, last or anywhere), **Show as** to make each header action a button or a **More** menu item, and the bin to remove one (removing New hides the New button). Each action is a list header button (runs for the record page record) or a row menu item (runs for that row). Flows receive the record ID in a text input variable named `recordId`. Quick actions are chosen from those Salesforce reports as available for that object.
+4. Click **Check for problems** (the same rules the list enforces), then **Save**. Saving deploys the Custom Metadata and the status changes to *Saved.* after a few seconds.
+5. In Lightning App Builder, add **Tekenable Advance Related List** and choose the definition from the **List Definition Key** dropdown. The dropdown lists only active definitions for that page's object.
+
+Removing a column marks it *Removed* (Apex can't delete Custom Metadata records). You can delete it permanently later in Setup → Custom Metadata Types → Tekenable Advance Related List Column.
+
+## Remembered filters
+
+Each user's filters, AND/OR choice and sort for a list are kept in their browser and come back after a page refresh or on another record with the same list. The list shows *Kept for your next visit* while they apply. **Clear all** forgets them. If an admin later changes the list so that saved filters no longer fit, they are cleared automatically with a short notice. To turn this off for a placement, select **Don't Keep Users' Filters and Sort** in App Builder. Saved filters don't move between browsers or devices. Details are in [ADR-003](docs/designs/ADR-003-remembered-filters-and-list-actions.md).
+
 ## List definitions
 
-A definition is one **Advanced Related List** record plus one **Advanced Related List Column** record per column. Both are Custom Metadata, so you can deploy them with change sets, the Metadata API or packages, and they keep the same values in every environment.
+A definition is one **Tekenable Advance Related List** record plus one **Tekenable Advance Related List Column** record (and optional **Action** records) per column. Both are Custom Metadata, so you can deploy them with change sets, the Metadata API or packages, and they keep the same values in every environment.
 
-Setup path: **Setup → Custom Metadata Types → Advanced Related List → Manage Records**.
+The **Tekenable Related List Builder** (above) is the recommended way to maintain these records. They can also be edited in **Setup → Custom Metadata Types → Tekenable Advance Related List → Manage Records**.
 
-**Advanced Related List** (`Advanced_Related_List__mdt`)
+**Tekenable Advance Related List** (`Advanced_Related_List__mdt`)
 
 | Field | Required | Example | Notes |
 |---|---|---|---|
@@ -73,9 +111,9 @@ Setup path: **Setup → Custom Metadata Types → Advanced Related List → Mana
 | Default Sort Field / Direction | – | `Name` / Ascending | Blank sorts by record ID |
 | Allow Create / Edit / Delete | – | ✔ | Row-level actions use standard Salesforce forms and delete |
 | Allow Bulk Delete | – | ☐ | Also needs the Bulk Delete permission set |
-| Flow API Name | – | `Contact_Update` | Screen flow; see [Flow inputs](#flow-inputs) |
+| Flow API Name | – | `Contact_Update` | Legacy single flow. Use **Actions** for one or more flows and quick actions; the builder migrates this field automatically |
 
-**Advanced Related List Column** (`Advanced_Related_List_Column__mdt`)
+**Tekenable Advance Related List Column** (`Advanced_Related_List_Column__mdt`)
 
 | Field | Example | Notes |
 |---|---|---|
@@ -122,6 +160,9 @@ Any object the user can read that has a lookup or master-detail field pointing t
 Search and text filters treat `%`, `_` and `\` as literal characters. Limits: 25 columns, 20 filter conditions, 100 characters of search text, 100 rows per page, and 100 rows per bulk delete. Totals above 2,000 show as "2,000+".
 
 ## Flow inputs
+
+All flow actions (header and row) receive the record they run for in a text input variable named `recordId`: the record page record for header buttons, the row record for row items. Configure flows and quick actions in the Related List Builder (section 6). The legacy single flow below still works.
+
 
 The flow button launches the configured **screen flow** in a dialog. It shows only to users who can edit the child object, as in v1. The flow receives one input variable:
 
@@ -184,9 +225,9 @@ v1's App Builder configuration keeps working after you deploy v2. **Until an adm
 
 ## Deployment
 
-Prerequisites: an org on API 67.0 (Summer '26) or later. All orgs on the current GA release (Winter '27, API 68.0) qualify. No managed-package dependency. The v1 package install links in older documentation point to the **v1** package, not this source.
+Prerequisites: an org on API 67.0 (Summer '26) or later. All orgs on the current GA release (Winter '27, API 68.0) qualify. No managed-package dependency. The v1 package install links in older documentation (`04tJ30000008qfj`, `04tJ30000008qfe`) install the legacy **v1** package; use the links in [Install](#install) for this version.
 
-The production-safe manifest is `manifest/package.xml`. It covers the Apex classes, the two Custom Metadata types and the example records, the custom permission, two permission sets and five LWC bundles. **Never deploy `fixtures/` to production.** It holds sandbox-only test objects, definitions and tests.
+The production-safe manifest is `manifest/package.xml`. It covers the Apex classes, the three Custom Metadata types and the example records, the custom permissions, three permission sets, the builder tab and page, and the LWC bundles. **Never deploy `fixtures/` to production.** It holds sandbox-only test objects, definitions and tests.
 
 ```bash
 # 1. Validate in the designated sandbox (no changes are saved)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomPermission xmlns="http://soap.sforce.com/2006/04/metadata">
-    <description>Allows deleting several selected records at once from an Advanced Related List whose definition allows bulk delete. Users still need delete access to the child object and to each record.</description>
+    <description>Allows deleting several selected records at once from an Tekenable Advance Related List whose definition allows bulk delete. Users still need delete access to the child object and to each record.</description>
     <isLicensed>false</isLicensed>
-    <label>Advanced Related List: Bulk Delete</label>
+    <label>Tekenable Advance Related List: Bulk Delete</label>
 </CustomPermission>

@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- Production-safe manifest for Advanced Related List v2. Excludes the sandbox-only fixtures/ directory. -->
+<!-- Production-safe manifest for Advanced Related List v2 (runtime + Related List Builder). Excludes fixtures/ and demo/. -->
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
     <types>
+        <members>RelatedListBuilderController</members>
+        <members>RelatedListBuilderService</members>
+        <members>RelatedListBuilderTest</members>
+        <members>RelatedListActionsTest</members>
         <members>RelatedListController</members>
         <members>RelatedListControllerTest</members>
+        <members>RelatedListDefinitionPicklist</members>
         <members>RelatedListDefinitions</members>
         <members>RelatedListException</members>
         <members>RelatedListQueryBuilder</members>
@@ -15,6 +20,7 @@
     </types>
     <types>
         <members>Advanced_Related_List__mdt</members>
+        <members>Advanced_Related_List_Action__mdt</members>
         <members>Advanced_Related_List_Column__mdt</members>
         <name>CustomObject</name>
     </types>
@@ -32,18 +38,36 @@
         <name>CustomMetadata</name>
     </types>
     <types>
+        <members>Advanced_Related_List_Admin</members>
         <members>Advanced_Related_List_Bulk_Delete</members>
         <name>CustomPermission</name>
     </types>
     <types>
+        <members>ARL_List_Builder</members>
+        <name>CustomTab</name>
+    </types>
+    <types>
+        <members>ARL_List_Builder</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>Advanced_Related_List__mdt-Advanced Related List Layout</members>
+        <members>Advanced_Related_List_Column__mdt-Advanced Related List Column Layout</members>
+        <members>Advanced_Related_List_Action__mdt-Advanced Related List Action Layout</members>
+        <name>Layout</name>
+    </types>
+    <types>
         <members>advanceRelatedList</members>
         <members>arlEditModal</members>
+        <members>arlFieldPicker</members>
         <members>arlFlowModal</members>
+        <members>arlListBuilder</members>
         <members>arlUtils</members>
         <members>filterPanel</members>
         <name>LightningComponentBundle</name>
     </types>
     <types>
+        <members>Advanced_Related_List_Admin</members>
         <members>Advanced_Related_List_Bulk_Delete</members>
         <members>Advanced_Related_List_User</members>
         <name>PermissionSet</name>

@@ -2,15 +2,27 @@
   "packageDirectories": [
     {
       "path": "force-app",
-      "default": true
+      "default": true,
+      "package": "Tekenable Advance Related List",
+      "versionName": "Version 2.0",
+      "versionNumber": "2.0.0.NEXT",
+      "versionDescription": "Tekenable Advance Related List: secure configurable related lists for Lightning record pages, Related List Builder, flows and quick actions, remembered filters."
     },
     {
       "path": "fixtures",
       "default": false
+    },
+    {
+      "path": "demo",
+      "default": false
     }
   ],
-  "name": "Advance Related List",
+  "name": "Tekenable Advance Related List",
   "namespace": "",
   "sfdcLoginUrl": "https://login.salesforce.com",
-  "sourceApiVersion": "67.0"
+  "sourceApiVersion": "67.0",
+  "packageAliases": {
+    "Tekenable Advance Related List": "0HodM0000006oIHSAY",
+    "Tekenable Advance Related List@2.0.0-1": "04tdM000000fjIvQAI"
+  }
 }

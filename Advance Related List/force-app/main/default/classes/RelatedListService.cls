@@ -121,8 +121,7 @@ public with sharing class RelatedListService {
         ctx.canEdit = spec.allowEdit && child.isUpdateable();
         ctx.canDelete = spec.allowDelete && child.isDeletable();
         ctx.canBulkDelete = spec.mode == RelatedListDefinitions.MODE_DEFINITION && spec.allowBulkDelete && child.isDeletable() && hasBulkDeletePermission();
-        // Unchanged from v1: the Flow button is offered to users who can edit the child object.
-        ctx.flowApiName = String.isNotBlank(spec.flowApiName) && child.isUpdateable() ? spec.flowApiName : null;
+        ctx.actions = buildActions(rl);
         ctx.editFields = new List<String>();
         for (RelatedListSchemaService.ResolvedColumn col : rl.columns) {
             if (col.editable) {
@@ -134,6 +133,99 @@ public with sharing class RelatedListService {
         ctx.omittedColumnCount = rl.omittedCount;
         ctx.maxDeleteBatch = MAX_DELETE;
         return ctx;
+    }
+
+    /**
+     * Launchable actions for the running user. Flows are offered as configured (the platform checks
+     * flow access when the flow starts). Quick actions are offered only when Salesforce reports them
+     * as available for the context object (parent for header buttons, child for row items).
+     * The legacy single Flow keeps its v1 rule: shown to users who can edit the child object.
+     */
+    @TestVisible
+    private static List<RelatedListController.ActionInfo> buildActions(RelatedListSchemaService.ResolvedList rl) {
+        List<RelatedListController.ActionInfo> result = new List<RelatedListController.ActionInfo>();
+        Map<String, Map<String, String>> availableByObject = new Map<String, Map<String, String>>();
+        for (RelatedListDefinitions.ActionSpec a : rl.spec.actions) {
+            Boolean isList = a.placement == RelatedListDefinitions.PLACEMENT_LIST;
+            RelatedListController.ActionInfo info = new RelatedListController.ActionInfo();
+            info.key = a.key;
+            info.label = a.label;
+            info.placement = isList ? 'list' : 'row';
+            info.display = !isList || a.display == null ? null : a.display.toLowerCase();
+            if (a.actionType == RelatedListDefinitions.ACTION_STANDARD) {
+                // New: only when the list allows it and the user can create the child object.
+                if (!(rl.spec.allowCreate == true && rl.childDescribe.isCreateable())) {
+                    continue;
+                }
+                info.type = 'standard';
+                info.target = 'new';
+                info.label = String.isBlank(a.label) ? 'New' : a.label;
+            } else if (a.actionType == RelatedListDefinitions.ACTION_FLOW) {
+                if (a.legacyFlow && !rl.childDescribe.isUpdateable()) {
+                    continue;
+                }
+                info.type = 'flow';
+                info.target = a.target;
+            } else {
+                String contextObject = isList ? rl.parentObject : rl.childObject;
+                Map<String, String> available = availableQuickActions(contextObject, availableByObject);
+                String label = available.get(a.target.toLowerCase());
+                if (label == null) {
+                    continue; // not available to this user / object: never show a broken button
+                }
+                info.type = 'quickAction';
+                info.target = a.target.contains('.') ? a.target : 'Global.' + a.target;
+                info.label = String.isBlank(a.label) ? label : a.label;
+            }
+            result.add(info);
+        }
+        applyFlowLabels(rl.spec.actions, result);
+        return result;
+    }
+
+    /** Configured flows without a label show the flow's own label (one query, only when needed). */
+    private static void applyFlowLabels(List<RelatedListDefinitions.ActionSpec> specs, List<RelatedListController.ActionInfo> infos) {
+        Map<String, Boolean> legacyByKey = new Map<String, Boolean>();
+        for (RelatedListDefinitions.ActionSpec a : specs) {
+            legacyByKey.put(a.key, a.legacyFlow);
+        }
+        Set<String> needed = new Set<String>();
+        for (RelatedListController.ActionInfo info : infos) {
+            if (info.type == 'flow' && String.isBlank(info.label) && legacyByKey.get(info.key) != true) {
+                needed.add(info.target);
+            }
+        }
+        if (needed.isEmpty()) {
+            return;
+        }
+        Map<String, String> labels = new Map<String, String>();
+        try {
+            for (FlowDefinitionView f : [SELECT ApiName, Label FROM FlowDefinitionView WHERE ApiName IN :needed WITH USER_MODE]) {
+                labels.put(f.ApiName.toLowerCase(), f.Label);
+            }
+        } catch (Exception e) {
+            return; // the client falls back to the page's Flow Modal Title
+        }
+        for (RelatedListController.ActionInfo info : infos) {
+            if (info.type == 'flow' && String.isBlank(info.label) && labels.containsKey(info.target.toLowerCase())) {
+                info.label = labels.get(info.target.toLowerCase());
+            }
+        }
+    }
+
+    private static Map<String, String> availableQuickActions(String objectName, Map<String, Map<String, String>> cache) {
+        if (!cache.containsKey(objectName)) {
+            Map<String, String> labels = new Map<String, String>();
+            try {
+                for (QuickAction.DescribeAvailableQuickActionResult r : QuickAction.describeAvailableQuickActions(objectName)) {
+                    labels.put(r.getName().toLowerCase(), r.getLabel());
+                }
+            } catch (Exception e) {
+                labels.clear();
+            }
+            cache.put(objectName, labels);
+        }
+        return cache.get(objectName);
     }
 
     private static List<RelatedListController.ColumnInfo> buildColumns(RelatedListSchemaService.ResolvedList rl) {

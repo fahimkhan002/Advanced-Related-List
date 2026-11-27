@@ -1,5 +1,5 @@
 /**
- * @description Categorised, user-safe exception for the Advanced Related List.
+ * @description Categorised, user-safe exception for the Tekenable Advance Related List.
  *              Messages must never contain record data, stack traces or query text.
  */
 public inherited sharing class RelatedListException extends Exception {
@@ -11,7 +11,7 @@ public inherited sharing class RelatedListException extends Exception {
         STALE
     }
 
-    public Category category = Category.INPUT;
+    public RelatedListException.Category category = RelatedListException.Category.INPUT;
 
     /**
      * @description Configuration problem an administrator can fix (unknown field, inactive definition...).
@@ -48,9 +48,9 @@ public inherited sharing class RelatedListException extends Exception {
         return build(Category.STALE, 'The list changed. Showing the first page.');
     }
 
-    private static RelatedListException build(Category category, String message) {
+    private static RelatedListException build(RelatedListException.Category kind, String message) {
         RelatedListException ex = new RelatedListException(message);
-        ex.category = category;
+        ex.category = kind;
         return ex;
     }
 }

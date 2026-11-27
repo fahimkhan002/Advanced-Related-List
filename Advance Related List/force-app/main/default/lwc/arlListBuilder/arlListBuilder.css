@@ -1,0 +1,29 @@
+.arl-inline-spinner {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+/* The actions table is not inside a scroll container, so dropdowns are never clipped. */
+.arl-actions-table {
+    table-layout: auto;
+}
+
+.arl-action-type {
+    min-width: 10rem;
+}
+
+.arl-action-placement {
+    min-width: 14rem;
+}
+
+.arl-action-target {
+    min-width: 14rem;
+}
+
+.arl-action-display {
+    min-width: 9rem;
+}
+
+.arl-action-label {
+    min-width: 9rem;
+}

@@ -1,5 +1,5 @@
 /**
- * @description End-to-end tests of the Advanced Related List boundary. Each permission test uses a
+ * @description End-to-end tests of the Tekenable Advance Related List boundary. Each permission test uses a
  *              Minimum Access user with an explicit permission set (object, field and custom
  *              permissions), not just System.runAs, so CRUD/FLS/sharing enforcement is exercised.
  */
@@ -32,7 +32,7 @@ private class RelatedListControllerTest {
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request(KEY, acct.Id, 5));
         Test.stopTest();
 
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(23, res.totalCount, 'count must use the same parent scope as the list');
         Assert.isFalse(res.totalCountCapped);
         Assert.areEqual(5, res.rows.size());
@@ -92,7 +92,7 @@ private class RelatedListControllerTest {
 
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request('Opp_List', acct.Id, 10));
 
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Map<String, Object> row = res.rows[0];
         Assert.areEqual(0, ((Decimal) row.get('o_amt')).intValue(), 'zero is a value, not blank');
         Assert.areEqual(false, row.get('o_priv'), 'false is a value, not blank');
@@ -111,7 +111,7 @@ private class RelatedListControllerTest {
 
         RelatedListController.ListResponse res = RelatedListController.getRows(req);
 
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual('legacy', res.context.mode);
         Assert.isFalse(res.context.canBulkDelete, 'legacy configuration can never enable bulk delete');
         Assert.areEqual(1, res.totalCount);
@@ -127,7 +127,7 @@ private class RelatedListControllerTest {
     static void legacyUnknownFieldIsConfigError() {
         RelatedListController.ListResponse res = RelatedListController.getRows(legacyRequest(alpha().Id, 'Name,Not_A_Field__c', '', ''));
         Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status);
-        Assert.isTrue(res.message.contains('Not_A_Field__c'), res.message);
+        Assert.isTrue(res.message.contains('Not_A_Field__c'), 'message: ' + res.message);
         Assert.isNull(res.rows, 'configuration errors return zero data');
     }
 
@@ -135,13 +135,13 @@ private class RelatedListControllerTest {
     static void legacyWrongLookupTargetIsConfigError() {
         // ReportsToId points to Contact, not Account: browser props cannot widen the scope.
         RelatedListController.ListResponse res = RelatedListController.getRows(withLookup(legacyRequest(alpha().Id, 'Name', '', ''), 'ReportsToId'));
-        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, 'message: ' + res.message);
     }
 
     @IsTest
     static void legacyNonLookupFieldIsConfigError() {
         RelatedListController.ListResponse res = RelatedListController.getRows(withLookup(legacyRequest(alpha().Id, 'Name', '', ''), 'Email'));
-        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, 'message: ' + res.message);
     }
 
     // ===== CONFIG ERRORS =====
@@ -159,7 +159,7 @@ private class RelatedListControllerTest {
 
         Assert.areEqual(RelatedListController.STATUS_CONFIG, unknown.status);
         Assert.areEqual(RelatedListController.STATUS_CONFIG, off.status);
-        Assert.isTrue(off.message.contains('inactive'), off.message);
+        Assert.isTrue(off.message.contains('inactive'), 'message: ' + off.message);
         Assert.areEqual(RelatedListController.STATUS_CONFIG, malformed.status);
         Assert.isNull(unknown.rows);
         Assert.isNull(off.rows);
@@ -170,7 +170,7 @@ private class RelatedListControllerTest {
         RelatedListTestData.register(RelatedListTestData.accountContacts());
         Contact c = [SELECT Id FROM Contact LIMIT 1];
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request(KEY, c.Id, 5));
-        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, 'message: ' + res.message);
     }
 
     @IsTest
@@ -201,8 +201,8 @@ private class RelatedListControllerTest {
         spec.columns.add(RelatedListTestData.column('t_what', 'What.Name', true, false, false, false));
         RelatedListTestData.register(spec);
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request('Poly', alpha().Id, 5));
-        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, res.message);
-        Assert.isTrue(res.message.contains('polymorphic'), res.message);
+        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, 'message: ' + res.message);
+        Assert.isTrue(res.message.contains('polymorphic'), 'message: ' + res.message);
     }
 
     @IsTest
@@ -211,7 +211,7 @@ private class RelatedListControllerTest {
         spec.columns.add(RelatedListTestData.column('addr', 'MailingAddress', true, false, false, true));
         RelatedListTestData.register(spec);
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request('Bad_Cap', alpha().Id, 5));
-        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_CONFIG, res.status, 'message: ' + res.message);
     }
 
     @IsTest
@@ -260,7 +260,7 @@ private class RelatedListControllerTest {
             tooBig, zero, longSearch, badOp, injectedOp, unknownKey, notFilterable, emptyValue, badDate, textOpOnDate, tooMany, badSort
         }) {
             RelatedListController.ListResponse res = RelatedListController.getRows(req);
-            Assert.areEqual(RelatedListController.STATUS_INPUT, res.status, res.message);
+            Assert.areEqual(RelatedListController.STATUS_INPUT, res.status, 'message: ' + res.message);
             Assert.isNull(res.rows);
         }
     }
@@ -271,15 +271,17 @@ private class RelatedListControllerTest {
     static void searchIsScopedToParentAndTreatsWildcardsLiterally() {
         RelatedListTestData.register(RelatedListTestData.accountContacts());
         Account acct = alpha();
-        insert new List<Contact>{
-            new Contact(AccountId = acct.Id, LastName = 'Rate 100% Exact'),
-            new Contact(AccountId = acct.Id, LastName = 'Rate 100x Exact'),
-            new Contact(AccountId = other().Id, LastName = 'Other 100% Exact')
-        };
+        RelatedListTestData.insertAllowingDuplicates(
+            new List<Contact>{
+                new Contact(AccountId = acct.Id, LastName = 'Rate 100% Exact'),
+                new Contact(AccountId = acct.Id, LastName = 'Rate 100x Exact'),
+                new Contact(AccountId = other().Id, LastName = 'Other 100% Exact')
+            }
+        );
         RelatedListController.ListRequest req = RelatedListTestData.request(KEY, acct.Id, 10);
         req.searchTerm = '100%';
         RelatedListController.ListResponse res = RelatedListController.getRows(req);
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(1, res.totalCount, '% is literal and other parents are excluded');
 
         req.searchTerm = 'Rate 100_';
@@ -340,7 +342,7 @@ private class RelatedListControllerTest {
             Boolean nullBeforeValue = false;
             do {
                 RelatedListController.ListResponse res = RelatedListController.getRows(req);
-                Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+                Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
                 for (Map<String, Object> row : res.rows) {
                     Id rowId = (Id) row.get('id');
                     seen.add(rowId);
@@ -412,7 +414,7 @@ private class RelatedListControllerTest {
             res = RelatedListController.getRows(req);
             RelatedListController.ListRequest all = RelatedListTestData.request(KEY, acct.Id, 50);
             RelatedListController.ListResponse allRes = RelatedListController.getRows(all);
-            Assert.areEqual(RelatedListController.STATUS_OK, allRes.status, allRes.message);
+            Assert.areEqual(RelatedListController.STATUS_OK, allRes.status, 'message: ' + allRes.message);
             Set<String> keys = new Set<String>();
             for (RelatedListController.ColumnInfo col : allRes.columns) {
                 keys.add(col.key);
@@ -428,7 +430,7 @@ private class RelatedListControllerTest {
             Assert.isFalse(allRes.context.canDelete, 'read-only user');
             Assert.isFalse(allRes.context.canBulkDelete, 'read-only user');
         }
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(0, res.totalCount, 'search must not use the hidden Phone field');
     }
 
@@ -445,7 +447,7 @@ private class RelatedListControllerTest {
         RelatedListTestData.giveToUser(acct, noContacts);
         System.runAs(noContacts) {
             RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request(KEY, acct.Id, 5));
-            Assert.areEqual(RelatedListController.STATUS_ACCESS, res.status, res.message);
+            Assert.areEqual(RelatedListController.STATUS_ACCESS, res.status, 'message: ' + res.message);
             Assert.isNull(res.rows);
         }
     }
@@ -466,7 +468,7 @@ private class RelatedListControllerTest {
             RelatedListController.ListResponse denied = RelatedListController.getRows(RelatedListTestData.request('Contact_Cases', parent.Id, 5));
             String fakeId = String.valueOf(parent.Id).left(3) + '000000000000';
             RelatedListController.ListResponse missing = RelatedListController.getRows(RelatedListTestData.request('Contact_Cases', fakeId, 5));
-            Assert.areEqual(RelatedListController.STATUS_ACCESS, denied.status, denied.message);
+            Assert.areEqual(RelatedListController.STATUS_ACCESS, denied.status, 'message: ' + denied.message);
             Assert.areEqual(denied.status, missing.status);
             Assert.areEqual(denied.message, missing.message, 'no access and not found are indistinguishable');
         }
@@ -503,7 +505,7 @@ private class RelatedListControllerTest {
             dml = Limits.getDmlStatements();
             Test.stopTest();
         }
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(2, res.deletedCount);
         Assert.areEqual(3, res.failedCount, 'other-parent row, malformed id and wrong-type id fail; duplicate ignored');
         Assert.areEqual(0, [SELECT COUNT() FROM Contact WHERE Id IN :mine]);
@@ -581,7 +583,7 @@ private class RelatedListControllerTest {
         RelatedListController.ListResponse second = RelatedListController.getRows(next);
         Integer secondPageQueries = Limits.getQueries() - firstPageQueries;
         Test.stopTest();
-        Assert.areEqual(RelatedListController.STATUS_OK, second.status, second.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, second.status, 'message: ' + second.message);
         Assert.areEqual(3, firstPageQueries, 'first page: parent check + count + page');
         Assert.areEqual(2, secondPageQueries, 'later pages: parent check + page (no count)');
         Assert.isNull(second.totalCount);
@@ -596,11 +598,11 @@ private class RelatedListControllerTest {
         for (Integer i = 0; i < 2005; i++) {
             contacts.add(new Contact(AccountId = big.Id, LastName = 'Bulk ' + String.valueOf(i).leftPad(5, '0')));
         }
-        insert contacts;
+        RelatedListTestData.insertAllowingDuplicates(contacts);
         Test.startTest();
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request(KEY, big.Id, 100));
         Test.stopTest();
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.isTrue(res.totalCountCapped);
         Assert.areEqual(RelatedListQueryBuilder.COUNT_CAP, res.totalCount);
         Assert.areEqual(100, res.rows.size());
@@ -612,7 +614,7 @@ private class RelatedListControllerTest {
     static void shippedExampleDefinitionLoadsFromCustomMetadata() {
         // No test override: exercises the real CMT SOQL path, including Definition__r.DeveloperName.
         RelatedListController.ListResponse res = RelatedListController.getRows(RelatedListTestData.request('Account_Contacts', alpha().Id, 5));
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         Assert.areEqual(9, res.columns.size());
         Assert.isFalse(res.columns[8].visible, 'MailingCity is search-only');
         Assert.areEqual('Contact Owner', res.columns[7].label);
@@ -625,7 +627,7 @@ private class RelatedListControllerTest {
         req.filters = filters;
         req.filterLogic = logic;
         RelatedListController.ListResponse res = RelatedListController.getRows(req);
-        Assert.areEqual(RelatedListController.STATUS_OK, res.status, res.message);
+        Assert.areEqual(RelatedListController.STATUS_OK, res.status, 'message: ' + res.message);
         return res.totalCount;
     }
 

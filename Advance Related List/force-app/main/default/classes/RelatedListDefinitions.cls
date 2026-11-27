@@ -13,6 +13,16 @@ public with sharing class RelatedListDefinitions {
 
     private static final Pattern KEY_PATTERN = Pattern.compile('^[A-Za-z][A-Za-z0-9_]{0,39}$');
     private static final Pattern FLOW_PATTERN = Pattern.compile('^[A-Za-z][A-Za-z0-9_]{0,79}$');
+    private static final Pattern QUICK_ACTION_PATTERN = Pattern.compile('^[A-Za-z_][A-Za-z0-9_]{0,79}(\\.[A-Za-z_][A-Za-z0-9_]{0,79})?$');
+    public static final Integer MAX_ACTIONS = 10;
+    public static final String ACTION_FLOW = 'Flow';
+    public static final String ACTION_QUICK = 'Quick_Action';
+    public static final String ACTION_STANDARD = 'Standard';
+    public static final String STANDARD_NEW = 'New';
+    public static final String DISPLAY_BUTTON = 'Button';
+    public static final String DISPLAY_MENU = 'Menu';
+    public static final String PLACEMENT_LIST = 'List';
+    public static final String PLACEMENT_ROW = 'Row';
 
     /** Test seam: Custom Metadata records cannot be inserted by tests. */
     @TestVisible
@@ -34,6 +44,22 @@ public with sharing class RelatedListDefinitions {
         public Boolean allowDelete = false;
         public Boolean allowBulkDelete = false;
         public String flowApiName;
+        public List<ActionSpec> actions = new List<ActionSpec>();
+    }
+
+    /** @description A configured action: a screen flow or a quick action, in the list header or each row. */
+    public class ActionSpec {
+        public String key;
+        /** Flow | Quick_Action */
+        public String actionType;
+        public String target;
+        public String label;
+        /** List | Row */
+        public String placement;
+        /** Button | Menu | null (automatic: first two header actions are buttons) */
+        public String display;
+        /** True for the action derived from the single legacy Flow setting. */
+        public Boolean legacyFlow = false;
     }
 
     /** @description Unvalidated column specification. `key` is stable for the definition. */
@@ -62,7 +88,7 @@ public with sharing class RelatedListDefinitions {
      */
     public static ListSpec load(String key) {
         if (String.isBlank(key) || !KEY_PATTERN.matcher(key).matches()) {
-            throw RelatedListException.config('The list definition key is not valid. Use the DeveloperName of an Advanced Related List definition.');
+            throw RelatedListException.config('The list definition key is not valid. Use the DeveloperName of an Tekenable Advance Related List definition.');
         }
         ListSpec spec = testDefinitions != null ? testDefinitions.get(key) : queryDefinition(key);
         if (spec == null) {
@@ -78,6 +104,7 @@ public with sharing class RelatedListDefinitions {
             throw RelatedListException.config('List definition "' + key + '" has more than ' + MAX_COLUMNS + ' columns.');
         }
         validateFlowName(spec.flowApiName);
+        finalizeActions(spec);
         return spec;
     }
 
@@ -132,7 +159,7 @@ public with sharing class RelatedListDefinitions {
                 Sortable__c,
                 Editable__c
             FROM Advanced_Related_List_Column__mdt
-            WHERE Definition__r.DeveloperName = :key
+            WHERE Definition__r.DeveloperName = :key AND Removed__c = false
             WITH SYSTEM_MODE
         ];
         for (Advanced_Related_List_Column__mdt col : sortColumns(cols)) {
@@ -145,7 +172,95 @@ public with sharing class RelatedListDefinitions {
             cs.editable = col.Editable__c;
             spec.columns.add(cs);
         }
+
+        List<String> actionKeys = new List<String>();
+        Map<String, Advanced_Related_List_Action__mdt> actionsByKey = new Map<String, Advanced_Related_List_Action__mdt>();
+        for (Advanced_Related_List_Action__mdt a : [
+            SELECT DeveloperName, Action_Type__c, Target__c, Label__c, Placement__c, Display__c, Order__c
+            FROM Advanced_Related_List_Action__mdt
+            WHERE Definition__r.DeveloperName = :key AND Removed__c = false
+            WITH SYSTEM_MODE
+        ]) {
+            Decimal ord = a.Order__c == null ? 99999 : a.Order__c;
+            String sortKey = String.valueOf(ord.intValue() + 100000).leftPad(8, '0') + '|' + a.DeveloperName;
+            actionKeys.add(sortKey);
+            actionsByKey.put(sortKey, a);
+        }
+        actionKeys.sort();
+        for (String k : actionKeys) {
+            Advanced_Related_List_Action__mdt a = actionsByKey.get(k);
+            ActionSpec act = new ActionSpec();
+            act.key = a.DeveloperName;
+            act.actionType = a.Action_Type__c;
+            act.target = a.Target__c;
+            act.label = a.Label__c;
+            act.placement = a.Placement__c;
+            act.display = a.Display__c;
+            spec.actions.add(act);
+        }
         return spec;
+    }
+
+    /**
+     * @description Validates configured actions and adds the legacy single Flow (definition field or
+     *              App Builder property) as a header action when no configured action runs that flow.
+     * @param spec spec
+     */
+    @TestVisible
+    private static void finalizeActions(ListSpec spec) {
+        if (spec.actions.size() > MAX_ACTIONS) {
+            throw RelatedListException.config('List definition "' + spec.definitionKey + '" has more than ' + MAX_ACTIONS + ' actions.');
+        }
+        Boolean legacyCovered = String.isBlank(spec.flowApiName);
+        Boolean hasNew = false;
+        for (ActionSpec a : spec.actions) {
+            if (a.actionType != ACTION_FLOW && a.actionType != ACTION_QUICK && a.actionType != ACTION_STANDARD) {
+                throw RelatedListException.config('Action "' + a.key + '" has an unknown type.');
+            }
+            if (a.placement != PLACEMENT_LIST && a.placement != PLACEMENT_ROW) {
+                throw RelatedListException.config('Action "' + a.key + '" has an unknown placement.');
+            }
+            if (a.display != null && a.display != DISPLAY_BUTTON && a.display != DISPLAY_MENU) {
+                throw RelatedListException.config('Action "' + a.key + '" has an unknown display setting.');
+            }
+            if (a.actionType == ACTION_STANDARD) {
+                if (!STANDARD_NEW.equalsIgnoreCase(a.target) || a.placement != PLACEMENT_LIST) {
+                    throw RelatedListException.config('Action "' + a.key + '": the only standard action is New, in the list header.');
+                }
+                hasNew = true;
+                continue;
+            }
+            Pattern p = a.actionType == ACTION_FLOW ? FLOW_PATTERN : QUICK_ACTION_PATTERN;
+            if (String.isBlank(a.target) || !p.matcher(a.target).matches()) {
+                throw RelatedListException.config('Action "' + a.key + '" has an invalid target.');
+            }
+            if (a.actionType == ACTION_FLOW && a.target.equalsIgnoreCase(spec.flowApiName)) {
+                legacyCovered = true;
+            }
+        }
+        if (!legacyCovered) {
+            ActionSpec legacy = new ActionSpec();
+            legacy.key = 'flow';
+            legacy.actionType = ACTION_FLOW;
+            legacy.target = spec.flowApiName;
+            legacy.placement = PLACEMENT_LIST;
+            legacy.legacyFlow = true;
+            if (spec.actions.isEmpty()) {
+                spec.actions.add(legacy);
+            } else {
+                spec.actions.add(0, legacy);
+            }
+        }
+        // Lists without a New action row keep New where it always was: after the other header actions.
+        if (!hasNew && spec.allowCreate == true) {
+            ActionSpec newAction = new ActionSpec();
+            newAction.key = 'new';
+            newAction.actionType = ACTION_STANDARD;
+            newAction.target = STANDARD_NEW;
+            newAction.placement = PLACEMENT_LIST;
+            newAction.display = DISPLAY_BUTTON;
+            spec.actions.add(newAction);
+        }
     }
 
     /** Orders by Order__c (blank last), then DeveloperName, without relying on CMT SOQL ORDER BY features. */
@@ -190,6 +305,7 @@ public with sharing class RelatedListDefinitions {
         spec.allowBulkDelete = false;
         spec.flowApiName = String.isBlank(legacy.flowName) ? null : legacy.flowName.trim();
         validateFlowName(spec.flowApiName);
+        finalizeActions(spec);
 
         List<String> display = splitList(legacy.fieldsToDisplay);
         // Labels are positional: keep blanks so "Name,,Phone" labels columns 1 and 3 only.

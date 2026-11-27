@@ -64,7 +64,10 @@ const CONTEXT = {
     canEdit: true,
     canDelete: true,
     canBulkDelete: true,
-    flowApiName: 'Contact_Flow',
+    actions: [
+        { key: 'flow', type: 'flow', target: 'Contact_Flow', label: null, placement: 'list' },
+        { key: 'new', type: 'standard', target: 'new', label: 'New', placement: 'list', display: 'button' }
+    ],
     editFields: ['Email'],
     sortKey: 'c_name',
     sortDirection: 'asc',
@@ -137,6 +140,7 @@ describe('c-advance-related-list', () => {
         }
         jest.clearAllMocks();
         jest.useRealTimers();
+        window.localStorage.clear();
     });
 
     describe('rendering', () => {
@@ -439,10 +443,10 @@ describe('c-advance-related-list', () => {
 
     describe('actions', () => {
         it('hides actions the user is not allowed to use', async () => {
-            getRows.mockResolvedValue(okResponse({ context: { canCreate: false, canEdit: false, canDelete: false, canBulkDelete: false, flowApiName: null } }));
+            getRows.mockResolvedValue(okResponse({ context: { canCreate: false, canEdit: false, canDelete: false, canBulkDelete: false, actions: [] } }));
             const element = await mount();
             expect($(element, '[data-id="new"]')).toBeNull();
-            expect($(element, '[data-id="flow"]')).toBeNull();
+            expect($(element, '[data-id="header-action"]')).toBeNull();
             expect($(element, '[data-id="bulk-delete"]')).toBeNull();
             const table = $(element, 'lightning-datatable');
             expect(table.hideCheckboxColumn).toBe(true);
@@ -589,7 +593,7 @@ describe('c-advance-related-list', () => {
             FlowModal.open.mockResolvedValue('finished');
             const element = await mount({ flowTitle: 'Update contacts' });
             getRows.mockClear();
-            const button = $(element, '[data-id="flow"]');
+            const button = $(element, '[data-id="header-action"]');
             expect(button.label).toBe('Update contacts');
             button.click();
             await flush();
@@ -606,7 +610,7 @@ describe('c-advance-related-list', () => {
             FlowModal.open.mockResolvedValue(undefined);
             const element = await mount();
             getRows.mockClear();
-            $(element, '[data-id="flow"]').click();
+            $(element, '[data-id="header-action"]').click();
             await flush();
             expect(getRows).not.toHaveBeenCalled();
         });
@@ -615,7 +619,7 @@ describe('c-advance-related-list', () => {
             FlowModal.open.mockResolvedValue('error');
             const element = await mount();
             const toasts = captureToasts(element);
-            $(element, '[data-id="flow"]').click();
+            $(element, '[data-id="header-action"]').click();
             await flush();
             expect(toasts[0].variant).toBe('error');
         });

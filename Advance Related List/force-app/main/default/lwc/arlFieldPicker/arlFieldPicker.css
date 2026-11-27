@@ -1,0 +1,4 @@
+.arl-picker-list {
+    max-height: 22rem;
+    overflow-y: auto;
+}

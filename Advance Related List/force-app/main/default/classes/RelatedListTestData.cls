@@ -1,5 +1,5 @@
 /**
- * @description Test fixtures for the Advanced Related List. Builds least-privilege users from the
+ * @description Test fixtures for the Tekenable Advance Related List. Builds least-privilege users from the
  *              "Minimum Access - Salesforce" profile plus a permission set with explicit object,
  *              field and custom permissions, so CRUD/FLS enforcement is exercised for real.
  */
@@ -160,8 +160,22 @@ public class RelatedListTestData {
                 )
             );
         }
-        insert contacts;
+        insertAllowingDuplicates(contacts);
         return acct;
+    }
+
+    /**
+     * @description Inserts records even when an org duplicate rule would alert on synthetic test data
+     *              (scratch orgs ship with active standard Contact/Account duplicate rules).
+     * @param records records to insert
+     */
+    public static void insertAllowingDuplicates(List<SObject> records) {
+        Database.DMLOptions options = new Database.DMLOptions();
+        options.DuplicateRuleHeader.allowSave = true;
+        options.DuplicateRuleHeader.runAsCurrentUser = true;
+        for (Database.SaveResult result : Database.insert(records, options)) {
+            Assert.isTrue(result.isSuccess(), String.valueOf(result.getErrors()));
+        }
     }
 
     // ===== USERS =====

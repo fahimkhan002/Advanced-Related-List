@@ -1,5 +1,5 @@
 /**
- * Shared, framework-free helpers for the Advanced Related List components.
+ * Shared, framework-free helpers for the Tekenable Advance Related List components.
  */
 
 export const OPERATOR_LABELS = {

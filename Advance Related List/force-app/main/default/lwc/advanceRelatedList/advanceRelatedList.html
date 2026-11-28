@@ -1,372 +1,273 @@
-<!-- Template structure for Advanced Related List Component -->
 <template>
-    <div class="slds-card">
-        
-                <!-- Permission Error Alert -->
-                <template if:true={permissionError}>
-                    <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error" role="alert">
-                        <span class="slds-assistive-text">error</span>
-                        <span class="slds-icon_container slds-icon-utility-error slds-m-right_x-small">
-                            <lightning-icon icon-name="utility:error"
-                                          alternative-text="Error"
-                                          size="x-small"
-                                          variant="inverse">
-                            </lightning-icon>
-                        </span>
-                        <h2>{permissionErrorMessage}</h2>
-                        <div class="slds-notify__close">
-                            <lightning-button-icon
-                                icon-name="utility:close"
-                                size="small"
-                                variant="bare-inverse"
-                                onclick={handleDismissPermissionError}
-                                alternative-text="Close">
-                            </lightning-button-icon>
-                        </div>
-                    </div>
+    <article class="slds-card arl-card">
+        <!-- Header -->
+        <div class="slds-card__header slds-grid slds-wrap slds-grid_vertical-align-center slds-gutters_x-small">
+            <header class="slds-media slds-media_center slds-col slds-grow">
+                <div class="slds-media__figure">
+                    <lightning-icon icon-name={iconName} size="small" style={iconStyle}></lightning-icon>
+                </div>
+                <div class="slds-media__body">
+                    <h2 class="slds-card__header-title" data-id="heading" tabindex="-1">
+                        <span class="slds-truncate" title={title}>{title}</span>
+                        <span class="slds-m-left_xx-small" data-id="count">{countLabel}</span>
+                    </h2>
+                </div>
+            </header>
+            <div class="slds-col slds-no-flex slds-grid slds-wrap slds-grid_vertical-align-center arl-toolbar">
+                <template lwc:if={hasSearchableColumns}>
+                    <lightning-input
+                        class="arl-search slds-m-right_x-small"
+                        data-id="search"
+                        type="search"
+                        label={searchLabel}
+                        variant="label-hidden"
+                        placeholder="Search this list"
+                        value={searchInput}
+                        onchange={handleSearchInput}
+                    ></lightning-input>
                 </template>
-        
-        <!-- 1. Header Section -->
-
-        <div class="slds-card__header">
-            <div class="slds-grid slds-grid_vertical-align-center slds-grid_align-spread">
-                <!-- 1.1 Title and Icon Section -->
-                <div class="slds-col">
-                    <div class="slds-media slds-media_center">
-                        <template if:true={hasIcon}>
-                            <div class="slds-icon_container slds-m-right_small">
-                                <lightning-icon 
-                                    icon-name={iconName}
-                                    size="small"
-                                    style={iconStyle}>
-                                </lightning-icon>
-                            </div>
+                <template lwc:if={hasFilterableColumns}>
+                    <lightning-button-icon-stateful
+                        data-id="filter-toggle"
+                        icon-name="utility:filterList"
+                        selected={showFilters}
+                        alternative-text={filterButtonLabel}
+                        title={filterButtonLabel}
+                        onclick={handleToggleFilters}
+                    ></lightning-button-icon-stateful>
+                </template>
+                <!-- Header actions in the admin's order, joined like the standard record actions,
+                     with the overflow as a ▾ menu at the end of the same group. -->
+                <template lwc:if={hasHeaderGroup}>
+                    <lightning-button-group class="arl-header-actions" data-id="header-actions">
+                        <template for:each={headerButtons} for:item="action">
+                            <lightning-button
+                                key={action.key}
+                                data-id={action.dataId}
+                                data-key={action.dataKey}
+                                label={action.displayLabel}
+                                onclick={handleHeaderAction}
+                            ></lightning-button>
                         </template>
-                        <div class="slds-media__body">
-                            <h2 class="slds-card__header-title">{displayTitle}</h2>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 1.2 Search and Actions Section -->
-                <div class="slds-col slds-grid slds-grid_align-end">
-                    <div class="slds-grid slds-grid_vertical-align-start">
-                        <!-- Search Input -->
-                        <div class="slds-form-element slds-m-right_small">
-                            <lightning-input
-                                type="search"
-                                variant="label-hidden"
-                                placeholder="Search..."
-                                onchange={handleSearch}
-                                class="search-input">
-                            </lightning-input>
-                        </div>
-
-                    <!-- Add the filter button HERE, right after the search input -->
-                        <lightning-button-icon 
-                        icon-name="utility:filter"
-                        alternative-text="Filter"
-                        title="Filter"
-                        class="slds-m-left_xx-small"
-                        onclick={handleFilterClick}>
-                        </lightning-button-icon>
-                        
-                        <!-- Action Buttons -->
-                        <div class="slds-button-group">
-                            <!-- Flow Button -->
-                            <template if:true={showFlowButton}>
-                                <lightning-button-icon 
-                                    icon-name="utility:flow"
-                                    alternative-text="Run Flow"
-                                    title="Run Flow"
-                                    class="slds-m-left_xx-small"
-                                    onclick={handleFlowLaunch}>
-                                </lightning-button-icon>
-                            </template>
-                            
-                            <!-- Refresh Button -->
-                            <lightning-button-icon 
-                                icon-name="utility:refresh"
-                                alternative-text="Refresh"
-                                title="Refresh"
-                                class="slds-m-left_xx-small"
-                                onclick={handleRefresh}>
-                            </lightning-button-icon>
-                
-                            <!-- New Record Button -->
-                            <template if:true={userPermissions.isCreateable}>
-                                <lightning-button-icon 
-                                    icon-name="utility:new"
-                                    alternative-text="New"
-                                    title="New"
-                                    class="slds-m-left_xx-small"
-                                    onclick={handleNewRecord}>
-                                </lightning-button-icon>
-                            </template>
-                            
-                            <!-- Bulk Delete Button -->
-                            <template if:true={showBulkDeleteButton}>
-                                <template if:true={userPermissions.isDeletable}>
-                                    <lightning-button-icon 
-                                        icon-name="utility:delete"
-                                        alternative-text="Delete Selected"
-                                        title="Delete Selected"
-                                        class="slds-m-left_xx-small"
-                                        onclick={handleBulkDelete}>
-                                    </lightning-button-icon>
+                        <template lwc:if={canBulkDelete}>
+                            <lightning-button
+                                data-id="bulk-delete"
+                                label={bulkDeleteLabel}
+                                variant="destructive-text"
+                                disabled={bulkDeleteDisabled}
+                                onclick={handleBulkDelete}
+                            ></lightning-button>
+                        </template>
+                        <template lwc:if={hasHeaderMenu}>
+                            <lightning-button-menu
+                                data-id="more-actions"
+                                alternative-text="More actions"
+                                title="More actions"
+                                icon-name="utility:down"
+                                variant="border-filled"
+                                menu-alignment="right"
+                                onselect={handleHeaderMenuAction}
+                            >
+                                <template for:each={headerMenuActions} for:item="action">
+                                    <lightning-menu-item key={action.key} value={action.key} label={action.displayLabel}></lightning-menu-item>
                                 </template>
-                            </template>
-                
-                            <!-- Settings Menu -->
-                            <div class="slds-dropdown-trigger slds-dropdown-trigger_click" style="position: relative;">
-                                <lightning-button-icon 
-                                    class="settings-button slds-m-left_xx-small"
-                                    icon-name="utility:settings"
-                                    alternative-text="Settings"
-                                    title="Settings"
-                                    onclick={handleSettingsClick}>
-                                </lightning-button-icon>
-                            
-                                <div if:true={showSettingsMenu} 
-                                     class="slds-dropdown slds-dropdown_right settings-dropdown"
-                                     style="position: absolute; right: 0; top: 2rem;"
-                                     role="menu">
-                                    <ul class="slds-dropdown__list">
-                                        <li class="slds-dropdown__item" role="presentation">
-                                            <a href="javascript:void(0);" 
-                                               role="menuitem"
-                                               onclick={handleResetColumnWidths}
-                                               class="slds-truncate">
-                                                Reset Column Widths
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                            </lightning-button-menu>
+                        </template>
+                    </lightning-button-group>
+                </template>
+                <lightning-button-icon
+                    class="slds-m-left_x-small"
+                    data-id="refresh"
+                    icon-name="utility:refresh"
+                    alternative-text="Refresh list"
+                    title="Refresh list"
+                    onclick={handleRefresh}
+                ></lightning-button-icon>
+                <template lwc:if={showSettingsMenu}>
+                    <lightning-button-menu
+                        class="slds-m-left_xx-small"
+                        data-id="settings"
+                        icon-name="utility:settings"
+                        alternative-text="List settings"
+                        menu-alignment="right"
+                        onselect={handleSettingsSelect}
+                    >
+                        <lightning-menu-item value="resetWidths" label="Reset column widths"></lightning-menu-item>
+                    </lightning-button-menu>
+                </template>
             </div>
         </div>
 
-        <template if:true={showFilterPanel}>
-            <div class="slds-p-around_small">
-                <c-filter-panel
-                    object-info={objectInfo}
-                    fields={fieldsArray}
-                    onfilterchange={handleFilterChange}>
-                </c-filter-panel>
+        <!-- Filter editor -->
+        <template lwc:if={showFilters}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_small">
+                <c-filter-panel columns={filterableColumns} logic={filterLogic} filters={filters} onapply={handleFilterApply} oncancel={handleFilterCancel}></c-filter-panel>
             </div>
         </template>
 
-        
-        <!-- 2. Error Alert Section -->
-        <template if:true={error}>
-            <div class="slds-notify slds-notify_alert slds-theme_alert-texture slds-theme_error">
-                {error.body.message}
+        <!-- Active filters -->
+        <template lwc:if={hasActiveFilters}>
+            <div class="slds-p-horizontal_medium slds-p-bottom_x-small slds-grid slds-wrap slds-grid_vertical-align-center" data-id="active-filters">
+                <span class="slds-text-body_small slds-m-right_x-small">{logicText}:</span>
+                <ul class="slds-listbox slds-listbox_horizontal" aria-label="Active filters">
+                    <template for:each={activeFilterPills} for:item="pill">
+                        <li key={pill.key} class="slds-listbox-item">
+                            <lightning-pill label={pill.label} data-index={pill.index} onremove={handleRemoveFilter}></lightning-pill>
+                        </li>
+                    </template>
+                </ul>
+                <lightning-button variant="base" data-id="clear-all" class="slds-m-left_x-small" label="Clear all" onclick={handleClearAll}></lightning-button>
+                <template lwc:if={showRememberedNote}>
+                    <span class="slds-text-body_small slds-text-color_weak slds-m-left_small" data-id="remembered">Kept for your next visit</span>
+                </template>
             </div>
         </template>
+        <template lwc:if={rememberNotice}>
+            <p class="slds-p-horizontal_medium slds-p-bottom_x-small slds-text-body_small slds-text-color_weak" role="status" data-id="remember-notice">{rememberNotice}</p>
+        </template>
 
-        <!-- 3. Main Content Body -->
-        <div class="slds-card__body">
-            <!-- 3.1 Loading Spinner -->
-            <template if:true={isLoading}>
-                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+        <div class="slds-card__body slds-card__body_inner arl-body" aria-busy={ariaBusy}>
+            <div class="slds-assistive-text" aria-live="polite" data-id="live">{announcement}</div>
+
+            <template lwc:if={isLoading}>
+                <lightning-spinner alternative-text="Loading records" size="small"></lightning-spinner>
             </template>
 
-            <!-- 3.2 Data Table -->
-            <div class="table-container">
-                <lightning-datatable
-                    key-field="Id"
-                    data={filteredData}
-                    columns={columns}
-                    onsort={handleSort}
-                    sorted-by={sortedBy}
-                    sorted-direction={sortedDirection}
-                    onrowselection={handleRowSelection}
-                    onrowaction={handleRowAction}
-                    selected-rows={preSelectedRows}
-                    resize-column-to-fit
-                    oncolumnresize={handleColumnResize}
-                    suppress-bottom-bar
-                    max-row-selection={maxRowSelection}
-                    enable-safe-html>
-                </lightning-datatable>
-            </div>
+            <!-- Error and configuration states -->
+            <template lwc:if={isConfigError}>
+                <div class="slds-scoped-notification slds-theme_warning" role="status" data-id="config-error">
+                    <p class="slds-text-title_bold">This list isn't set up correctly</p>
+                    <p>{message}</p>
+                    <p class="slds-text-body_small">Ask your Salesforce administrator to check this component's settings.</p>
+                </div>
+            </template>
+            <template lwc:if={isAccessError}>
+                <div class="slds-scoped-notification slds-theme_info" role="status" data-id="access-error">
+                    <p class="slds-text-title_bold">You can't view this list</p>
+                    <p>{message}</p>
+                </div>
+            </template>
+            <template lwc:if={isInputError}>
+                <div class="slds-scoped-notification slds-theme_warning" role="alert" data-id="input-error">
+                    <p>{message}</p>
+                    <lightning-button variant="base" label="Clear search and filters" onclick={handleClearAll}></lightning-button>
+                </div>
+            </template>
+            <template lwc:if={isGenericError}>
+                <div class="slds-scoped-notification slds-theme_error" role="alert" data-id="error">
+                    <p>{message}</p>
+                    <lightning-button variant="base" label="Try again" onclick={handleRetry}></lightning-button>
+                </div>
+            </template>
 
-            <!-- 3.3 Pagination -->
-            <div class="slds-grid slds-grid_align-center slds-m-top_small">
-                <div class="slds-button-group">
-                    <lightning-button
-                        label="Previous"
-                        onclick={handlePrevious}
-                        disabled={isFirstPage}>
-                    </lightning-button>
-                    <div class="slds-p-horizontal_medium slds-grid slds-grid_vertical-align-center">
-                        Page {pageNumber} of {totalPages}
-                        <template if:true={debouncedSearchTerm}>
-                            (Filtered)
+            <template lwc:if={hasRowErrors}>
+                <div class="slds-scoped-notification slds-theme_warning slds-m-bottom_x-small" role="alert" data-id="row-errors">
+                    <p class="slds-text-title_bold">Some records couldn't be deleted. They are still selected.</p>
+                    <ul class="slds-list_dotted">
+                        <template for:each={rowErrors} for:item="rowError">
+                            <li key={rowError.id}>{rowError.text}</li>
                         </template>
+                    </ul>
+                    <lightning-button variant="base" label="Dismiss" onclick={handleDismissRowErrors}></lightning-button>
+                </div>
+            </template>
+
+            <template lwc:if={hasOmittedColumns}>
+                <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small" data-id="omitted">
+                    Some columns are hidden because you don't have access to those fields.
+                </p>
+            </template>
+
+            <!-- Empty and no-match states -->
+            <template lwc:if={isEmpty}>
+                <p class="slds-p-vertical_medium slds-text-align_center slds-text-color_weak" data-id="empty">{emptyText}</p>
+            </template>
+            <template lwc:if={isNoMatch}>
+                <div class="slds-p-vertical_medium slds-text-align_center" data-id="no-match">
+                    <p class="slds-text-color_weak">No records match your search or filters.</p>
+                    <lightning-button variant="base" label="Clear search and filters" onclick={handleClearAll}></lightning-button>
+                </div>
+            </template>
+
+            <!-- Rows -->
+            <template lwc:if={hasRows}>
+                <template lwc:if={isSmall}>
+                    <template lwc:if={hasSortOptions}>
+                        <div class="slds-grid slds-gutters_x-small slds-m-bottom_x-small" data-id="small-sort">
+                            <lightning-combobox class="slds-col" label="Sort by" value={sortKey} options={sortOptions} onchange={handleSmallSortField}></lightning-combobox>
+                            <lightning-combobox class="slds-col" label="Order" value={sortDirection} options={directionOptions} onchange={handleSmallSortDirection}></lightning-combobox>
+                        </div>
+                    </template>
+                    <ul class="slds-has-dividers_bottom-space" data-id="cards" aria-label={title}>
+                        <template for:each={cards} for:item="card">
+                            <li key={card.id} class="slds-item">
+                                <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-start">
+                                    <a href="#" class="slds-text-heading_small" data-id={card.id} onclick={handleCardOpen}>{card.title}</a>
+                                    <lightning-button-menu
+                                        data-id={card.id}
+                                        alternative-text={card.menuLabel}
+                                        icon-size="x-small"
+                                        menu-alignment="right"
+                                        onselect={handleCardAction}
+                                    >
+                                        <template for:each={rowActions} for:item="action">
+                                            <lightning-menu-item key={action.name} value={action.name} label={action.label}></lightning-menu-item>
+                                        </template>
+                                    </lightning-button-menu>
+                                </div>
+                                <dl class="slds-list_horizontal slds-wrap">
+                                    <template for:each={card.details} for:item="detail">
+                                        <div key={detail.key} class="slds-grid slds-size_1-of-1">
+                                            <dt class="slds-item_label slds-text-color_weak slds-truncate">{detail.label}</dt>
+                                            <dd class="slds-item_detail">{detail.value}</dd>
+                                        </div>
+                                    </template>
+                                </dl>
+                            </li>
+                        </template>
+                    </ul>
+                </template>
+                <template lwc:else>
+                    <div class="arl-table">
+                        <lightning-datatable
+                            key-field="id"
+                            data={rows}
+                            columns={datatableColumns}
+                            show-row-number-column
+                            row-number-offset={rowNumberOffset}
+                            hide-checkbox-column={hideCheckboxColumn}
+                            max-row-selection={maxRowSelection}
+                            selected-rows={selectedIds}
+                            sorted-by={datatableSortedBy}
+                            sorted-direction={sortDirection}
+                            default-sort-direction="asc"
+                            onsort={handleSort}
+                            onrowselection={handleRowSelection}
+                            onrowaction={handleRowAction}
+                            oncolumnresize={handleColumnResize}
+                        ></lightning-datatable>
                     </div>
+                </template>
+            </template>
+
+            <!-- Pagination -->
+            <template lwc:if={showPagination}>
+                <nav class="slds-grid slds-grid_align-center slds-grid_vertical-align-center slds-m-top_small" aria-label="Pagination">
+                    <lightning-button data-id="prev" label="Previous" icon-name="utility:chevronleft" onclick={handlePrevious} disabled={isFirstPage}></lightning-button>
+                    <span class="slds-p-horizontal_medium" data-id="page">{pageText}</span>
                     <lightning-button
+                        data-id="next"
                         label="Next"
+                        icon-name="utility:chevronright"
+                        icon-position="right"
                         onclick={handleNext}
-                        disabled={isLastPage}>
-                    </lightning-button>
-                </div>
-            </div>
+                        disabled={isLastPage}
+                    ></lightning-button>
+                </nav>
+            </template>
+            <template lwc:if={hasRows}>
+                <p class="slds-text-body_small slds-text-color_weak slds-text-align_center slds-m-top_x-small" data-id="range">{rangeText}</p>
+            </template>
         </div>
-
-        <!-- 4. Modal Sections -->
-        <!-- 4.1 Flow Modal -->
-        <template if:true={showFlowModal}>
-            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open slds-modal_large">
-                <div class="slds-modal__container" style="width: 90%; max-width: 70rem;">
-                    <header class="slds-modal__header">
-                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={handleCloseModal}>
-                            <lightning-icon icon-name="utility:close" alternative-text="close" variant="inverse" size="small"></lightning-icon>
-                            <span class="slds-assistive-text">Close</span>
-                        </button>
-                        <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">
-                            {flowTitle}
-                        </h2>
-                    </header>
-                    <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1" style="min-height: 50vh;">
-                        <lightning-flow
-                            key={flowKey}
-                            flow-api-name={flowName}
-                            flow-input-variables={flowInputVariables}
-                            onstatuschange={handleFlowStatusChange}>
-                        </lightning-flow>
-                    </div>
-                </div>
-            </section>
-            <div class="slds-backdrop slds-backdrop_open"></div>
-        </template>
-
-        <!-- Edit Record Modal -->
-        <template if:true={showEditModal}>
-            <section role="dialog" data-id="editModal" tabindex="-1" aria-labelledby="modal-heading-02" aria-modal="true" class="slds-modal slds-fade-in-open">
-                <div class="slds-modal__container">
-                    <header class="slds-modal__header">
-                        <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseEditModal}>
-                            <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
-                        </button>
-                        <h2 id="modal-heading-02" class="slds-modal__title slds-hyphenate">Edit {childObjectLabel}</h2>
-                    </header>
-                    <div class="slds-modal__content slds-p-around_medium">
-                        <template if:true={permissionError}>
-                            <div class="permission-error slds-m-bottom_small">
-                                {permissionErrorMessage}
-                            </div>
-                        </template>
-                        <lightning-record-edit-form
-                            record-id={selectedRecordId}
-                            object-api-name={childObjectApiName}
-                            onsubmit={handleRecordSubmit}
-                            onsuccess={handleRecordSuccess}
-                            onerror={handleRecordError}>
-                            
-                            <lightning-messages></lightning-messages>
-                            
-                            <div class="slds-grid slds-wrap slds-gutters">
-                                <template for:each={editFormFields} for:item="fieldName">
-                                    <div key={fieldName} class="slds-col slds-size_1-of-2 slds-p-around_xx-small">
-                                        <lightning-input-field 
-                                            field-name={fieldName}
-                                            required={isFieldRequired}
-                                            variant="label-stacked">
-                                        </lightning-input-field>
-                                    </div>
-                                </template>
-                            </div>
-                            
-                            <div class="slds-m-top_medium slds-text-align_right">
-                                <lightning-button 
-                                    label="Cancel" 
-                                    onclick={handleCloseEditModal} 
-                                    class="slds-m-right_x-small">
-                                </lightning-button>
-                                <lightning-button 
-                                    variant="brand" 
-                                    type="submit" 
-                                    name="submit"
-                                    label="Save"
-                                    disabled={permissionError}>
-                                </lightning-button>
-                            </div>
-                        </lightning-record-edit-form>
-                    </div>
-                </div>
-            </section>
-            <div class="slds-backdrop slds-backdrop_open"></div>
-        </template>
-
-        <!-- Delete Confirmation Modal -->
-        <template if:true={showDeleteModal}>
-            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-03" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
-                <div class="slds-modal__container">
-                    <header class="slds-modal__header slds-theme_alert-texture slds-theme_error">
-                        <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseDeleteModal}>
-                            <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
-                        </button>
-                        <h2 id="modal-heading-03" class="slds-modal__title slds-hyphenate">Delete Record</h2>
-                    </header>
-                    <div class="slds-modal__content slds-p-around_medium">
-                        <template if:true={permissionError}>
-                            <div class="permission-error slds-m-bottom_small">
-                                {permissionErrorMessage}
-                            </div>
-                        </template>
-                        <p class="slds-text-heading_small slds-text-align_center">
-                            Are you sure you want to delete this record? This action cannot be undone.
-                        </p>
-                    </div>
-                    <footer class="slds-modal__footer">
-                        <lightning-button label="Cancel" onclick={handleCloseDeleteModal}></lightning-button>
-                        <lightning-button variant="destructive" label="Delete" onclick={handleConfirmDelete} disabled={permissionError}></lightning-button>
-                    </footer>
-                </div>
-            </section>
-            <div class="slds-backdrop slds-backdrop_open"></div>
-        </template>
-
-        <!-- Bulk Delete Modal -->
-        <template if:true={showBulkDeleteModal}>
-            <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-bulk-delete" aria-modal="true" class="slds-modal slds-fade-in-open slds-modal_small">
-                <div class="slds-modal__container">
-                    <header class="slds-modal__header slds-theme_alert-texture slds-theme_error">
-                        <button class="slds-button slds-button_icon slds-modal__close" title="Close" onclick={handleCloseBulkDeleteModal}>
-                            <lightning-icon icon-name="utility:close" alternative-text="Close" size="small"></lightning-icon>
-                        </button>
-                        <h2 id="modal-heading-bulk-delete" class="slds-modal__title slds-hyphenate">Delete Selected Records</h2>
-                    </header>
-                    <div class="slds-modal__content slds-p-around_medium">
-                        <template if:true={permissionError}>
-                            <div class="permission-error slds-m-bottom_small">
-                                {permissionErrorMessage}
-                            </div>
-                        </template>
-                        <p class="slds-text-heading_small slds-text-align_center">
-                            Are you sure you want to delete {selectedRows.length} selected records? This action cannot be undone.
-                        </p>
-                    </div>
-                    <footer class="slds-modal__footer">
-                        <lightning-button 
-                            label="Cancel" 
-                            onclick={handleCloseBulkDeleteModal}>
-                        </lightning-button>
-                        <lightning-button 
-                            variant="destructive" 
-                            label="Delete" 
-                            onclick={handleConfirmBulkDelete}
-                            disabled={permissionError}
-                            class="slds-m-left_x-small">
-                        </lightning-button>
-                    </footer>
-                </div>
-            </section>
-            <div class="slds-backdrop slds-backdrop_open"></div>
-        </template>
-    </div>
+    </article>
 </template>

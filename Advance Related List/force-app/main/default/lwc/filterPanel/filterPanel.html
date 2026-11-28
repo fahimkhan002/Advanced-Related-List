@@ -1,74 +1,113 @@
 <template>
-    <div class="slds-form-element">
-        <div class="slds-grid slds-grid_vertical">
-            <template for:each={filters} for:item="filter" for:index="index">
-                <div key={filter.id} class="slds-grid slds-gutters slds-m-bottom_x-small">
-                    <!-- Logic Operator -->
-                    <div class="slds-col slds-size_1-of-12">
-                        <template if:true={index}>
+    <section class="slds-box slds-box_small slds-theme_shade" aria-label="Filters" onkeydown={handleKeyDown}>
+        <template lwc:if={hasColumns}>
+            <lightning-radio-group
+                class="slds-m-bottom_x-small"
+                label="Show records that match"
+                options={logicOptions}
+                value={draftLogic}
+                type="button"
+                onchange={handleLogicChange}
+            ></lightning-radio-group>
+
+            <ol>
+                <template for:each={rows} for:item="row">
+                    <li key={row.id} class="slds-grid slds-wrap slds-gutters_x-small slds-grid_vertical-align-end slds-m-bottom_x-small">
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12">
                             <lightning-combobox
-                                data-id={filter.id}
-                                variant="label-hidden"
-                                value={filter.logicOperator}
-                                options={logicOperators}
-                                onchange={handleLogicOperatorChange}>
-                            </lightning-combobox>
-                        </template>
-                    </div>
-                    
-                    <!-- Field -->
-                    <div class="slds-col slds-size_3-of-12">
-                        <lightning-combobox
-                            data-id={filter.id}
-                            label="Field"
-                            value={filter.field}
-                            options={fieldOptions}
-                            onchange={handleFieldChange}>
-                        </lightning-combobox>
-                    </div>
-                    
-                    <!-- Operator -->
-                    <div class="slds-col slds-size_3-of-12">
-                        <lightning-combobox
-                            data-id={filter.id}
-                            label="Operator"
-                            value={filter.operator}
-                            options={operators}
-                            onchange={handleOperatorChange}>
-                        </lightning-combobox>
-                    </div>
-                    
-                    <!-- Value -->
-                    <div class="slds-col slds-size_3-of-12">
-                        <lightning-input
-                            data-id={filter.id}
-                            label="Value"
-                            value={filter.value}
-                            onchange={handleValueChange}>
-                        </lightning-input>
-                    </div>
-                    
-                    <!-- Remove Button -->
-                    <div class="slds-col slds-size_2-of-12 slds-align-bottom">
-                        <lightning-button-icon
-                            data-id={filter.id}
-                            icon-name="utility:delete"
-                            alternative-text="Remove Filter"
-                            title="Remove Filter"
-                            onclick={removeFilter}>
-                        </lightning-button-icon>
-                    </div>
+                                data-id={row.id}
+                                data-role="field"
+                                label={row.fieldLabel}
+                                value={row.columnKey}
+                                options={fieldOptions}
+                                onchange={handleFieldChange}
+                            ></lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_3-of-12">
+                            <lightning-combobox
+                                data-id={row.id}
+                                data-role="operator"
+                                label={row.operatorLabel}
+                                value={row.operator}
+                                options={row.operatorOptions}
+                                onchange={handleOperatorChange}
+                            ></lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12">
+                            <template lwc:if={row.needsValue}>
+                                <template lwc:if={row.isText}>
+                                    <lightning-input
+                                        data-id={row.id}
+                                        data-role="value"
+                                        type="text"
+                                        label={row.valueLabel}
+                                        value={row.value}
+                                        max-length="255"
+                                        required
+                                        onchange={handleValueChange}
+                                    ></lightning-input>
+                                </template>
+                                <template lwc:if={row.isNumber}>
+                                    <lightning-input
+                                        data-id={row.id}
+                                        data-role="value"
+                                        type="number"
+                                        step="any"
+                                        label={row.valueLabel}
+                                        value={row.value}
+                                        required
+                                        onchange={handleValueChange}
+                                    ></lightning-input>
+                                </template>
+                                <template lwc:if={row.isDate}>
+                                    <lightning-input
+                                        data-id={row.id}
+                                        data-role="value"
+                                        type="date"
+                                        label={row.valueLabel}
+                                        value={row.value}
+                                        required
+                                        onchange={handleValueChange}
+                                    ></lightning-input>
+                                </template>
+                                <template lwc:if={row.isChoice}>
+                                    <lightning-combobox
+                                        data-id={row.id}
+                                        data-role="value"
+                                        label={row.valueLabel}
+                                        value={row.value}
+                                        options={row.choiceOptions}
+                                        required
+                                        onchange={handleValueChange}
+                                    ></lightning-combobox>
+                                </template>
+                            </template>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-12">
+                            <lightning-button-icon
+                                data-id={row.id}
+                                data-role="remove"
+                                icon-name="utility:delete"
+                                alternative-text={row.removeLabel}
+                                title={row.removeLabel}
+                                onclick={handleRemove}
+                            ></lightning-button-icon>
+                        </div>
+                    </li>
+                </template>
+            </ol>
+
+            <div class="slds-grid slds-wrap slds-grid_align-spread slds-m-top_x-small">
+                <lightning-button data-role="add" label="Add condition" icon-name="utility:add" onclick={handleAdd} disabled={addDisabled}></lightning-button>
+                <div>
+                    <lightning-button data-role="clear" class="slds-m-left_x-small" label="Clear all" onclick={handleClearAll}></lightning-button>
+                    <lightning-button data-role="cancel" class="slds-m-left_x-small" label="Cancel" onclick={handleCancel}></lightning-button>
+                    <lightning-button data-role="apply" class="slds-m-left_x-small" variant="brand" label="Apply" onclick={handleApply}></lightning-button>
                 </div>
-            </template>
-        </div>
-        
-        <!-- Add Filter Button -->
-        <div class="slds-m-top_small">
-            <lightning-button
-                label="Add Filter"
-                onclick={addFilter}
-                icon-name="utility:add">
-            </lightning-button>
-        </div>
-    </div>
+            </div>
+        </template>
+        <template lwc:else>
+            <p>No fields in this list can be filtered.</p>
+        </template>
+    </section>
 </template>

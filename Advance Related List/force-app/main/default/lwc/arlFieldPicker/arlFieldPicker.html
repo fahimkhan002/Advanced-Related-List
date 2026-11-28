@@ -1,0 +1,63 @@
+<template>
+    <section class="slds-box slds-theme_shade" aria-label={heading} onkeydown={handleKeyDown}>
+        <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-bottom_x-small">
+            <h3 class="slds-text-heading_small" data-id="picker-heading">{heading}</h3>
+            <lightning-button data-id="picker-cancel" label="Cancel" onclick={handleCancel}></lightning-button>
+        </div>
+        <nav aria-label="Relationship path" class="slds-m-bottom_x-small">
+            <ol class="slds-breadcrumb slds-list_horizontal slds-wrap">
+                <template for:each={breadcrumbs} for:item="crumb">
+                    <li key={crumb.key} class="slds-breadcrumb__item">
+                        <a href="#" data-index={crumb.index} onclick={handleCrumb}>{crumb.label}</a>
+                    </li>
+                </template>
+            </ol>
+        </nav>
+        <lightning-input type="search" label="Search fields" data-id="picker-search" value={searchText} onchange={handleSearch}></lightning-input>
+
+        <template lwc:if={isLoading}>
+            <div class="slds-is-relative slds-p-around_large"><lightning-spinner alternative-text="Loading fields" size="small"></lightning-spinner></div>
+        </template>
+        <template lwc:if={error}>
+            <p class="slds-text-color_error slds-m-top_x-small" role="alert">{error}</p>
+        </template>
+
+        <template lwc:if={hasFields}>
+            <ul class="slds-has-dividers_top-space slds-m-top_x-small arl-picker-list" data-id="picker-list">
+                <template for:each={visibleFields} for:item="field">
+                    <li key={field.apiName} class="slds-item slds-grid slds-grid_vertical-align-center slds-grid_align-spread">
+                        <div class="slds-truncate">
+                            <span class="slds-text-body_regular">{field.label}</span>
+                            <span class="slds-text-body_small slds-text-color_weak slds-m-left_x-small">{field.path} · {field.abilityText}</span>
+                        </div>
+                        <div class="slds-no-flex">
+                            <template lwc:if={field.canDrill}>
+                                <lightning-button-icon
+                                    data-api={field.apiName}
+                                    data-role="drill"
+                                    icon-name="utility:chevronright"
+                                    alternative-text={field.drillLabel}
+                                    title={field.drillLabel}
+                                    onclick={handleDrill}
+                                ></lightning-button-icon>
+                            </template>
+                            <template lwc:if={field.added}>
+                                <span class="slds-badge slds-m-left_x-small">Added</span>
+                            </template>
+                            <template lwc:else>
+                                <lightning-button
+                                    class="slds-m-left_x-small"
+                                    data-api={field.apiName}
+                                    data-role="select"
+                                    label="Add"
+                                    title={field.selectLabel}
+                                    onclick={handleSelect}
+                                ></lightning-button>
+                            </template>
+                        </div>
+                    </li>
+                </template>
+            </ul>
+        </template>
+    </section>
+</template>

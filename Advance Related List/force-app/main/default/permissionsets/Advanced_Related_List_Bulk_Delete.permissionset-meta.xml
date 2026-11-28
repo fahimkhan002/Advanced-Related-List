@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customPermissions>
+        <enabled>true</enabled>
+        <name>Advanced_Related_List_Bulk_Delete</name>
+    </customPermissions>
+    <description>Optional privileged action: bulk delete from Tekenable Advance Related Lists whose definition allows it. Assign together with Tekenable Advance Related List User.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Tekenable Advance Related List Bulk Delete</label>
+</PermissionSet>

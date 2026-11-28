@@ -1,0 +1,312 @@
+<template>
+    <lightning-card title="Tekenable Related List Builder" icon-name="standard:related_list">
+        <lightning-button slot="actions" data-id="new" label="New related list" icon-name="utility:add" onclick={handleNew} disabled={showNoAccess}></lightning-button>
+
+        <div class="slds-card__body_inner">
+            <template lwc:if={isLoading}>
+                <div class="slds-is-relative slds-p-around_xx-large"><lightning-spinner alternative-text="Loading the builder" size="medium"></lightning-spinner></div>
+            </template>
+            <template lwc:if={error}>
+                <div class="slds-scoped-notification slds-theme_error" role="alert" data-id="error">{error}</div>
+            </template>
+            <template lwc:if={showNoAccess}>
+                <div class="slds-scoped-notification slds-theme_info" role="status" data-id="no-access">
+                    <p class="slds-text-title_bold">You can't use the Tekenable Related List Builder</p>
+                    <p>{accessReason}</p>
+                </div>
+            </template>
+
+            <template lwc:if={showBuilder}>
+                <div class="slds-grid slds-wrap slds-gutters">
+                    <!-- Definitions -->
+                    <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-4">
+                        <lightning-input type="search" label="Find a related list" data-id="list-search" value={listSearch} onchange={handleListSearch}></lightning-input>
+                        <template lwc:if={hasDefinitions}>
+                            <nav class="slds-nav-vertical slds-m-top_small" aria-label="Related lists">
+                                <ul data-id="definitions">
+                                    <template for:each={filteredDefinitions} for:item="def">
+                                        <li key={def.developerName} class={def.itemClass}>
+                                            <a href="#" class="slds-nav-vertical__action" data-key={def.developerName} aria-current={def.ariaCurrent} onclick={handleSelectDefinition}>
+                                                <span>
+                                                    <span class="slds-text-body_regular">{def.label}</span>
+                                                    <template lwc:if={def.active}></template>
+                                                    <template lwc:else><span class="slds-badge slds-m-left_x-small">Inactive</span></template>
+                                                    <span class="slds-text-body_small slds-text-color_weak slds-show">{def.summary}</span>
+                                                </span>
+                                            </a>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </nav>
+                        </template>
+                        <template lwc:else>
+                            <p class="slds-m-top_small slds-text-color_weak" data-id="no-definitions">No related lists yet. Click New related list.</p>
+                        </template>
+                    </div>
+
+                    <!-- Editor -->
+                    <div class="slds-col slds-size_1-of-1 slds-large-size_3-of-4">
+                        <template lwc:if={hasDraft}>
+                            <h2 class="slds-text-heading_medium slds-m-bottom_small" data-id="editor-heading">{editorHeading}</h2>
+
+                            <section class="slds-m-bottom_medium" aria-labelledby="arl-details">
+                                <h3 class="slds-text-heading_small slds-m-bottom_x-small" id="arl-details">1. Details</h3>
+                                <div class="slds-grid slds-wrap slds-gutters_x-small">
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                                        <lightning-input data-id="label" label="Label" max-length="40" required value={draft.label} onchange={handleLabel}></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                                        <lightning-input
+                                            data-id="api-name"
+                                            label="API name (List Definition Key)"
+                                            field-level-help="Chosen from the List Definition Key dropdown in Lightning App Builder. It can't be changed after saving."
+                                            max-length="40"
+                                            required
+                                            value={draft.developerName}
+                                            disabled={apiNameDisabled}
+                                            onchange={handleApiName}
+                                        ></lightning-input>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-1 slds-m-top_x-small">
+                                        <lightning-input type="toggle" data-id="active" label="Active" message-toggle-active="Pages show this list" message-toggle-inactive="Pages show a configuration message" checked={draft.active} onchange={handleActive}></lightning-input>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="slds-m-bottom_medium" aria-labelledby="arl-records">
+                                <h3 class="slds-text-heading_small slds-m-bottom_x-small" id="arl-records">2. Records to show</h3>
+                                <div class="slds-grid slds-wrap slds-gutters_x-small">
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                                        <lightning-input type="search" data-id="object-search" label="Find the record page object" value={objectSearch} onchange={handleObjectSearch}></lightning-input>
+                                        <lightning-combobox
+                                            class="slds-m-top_x-small"
+                                            data-id="parent"
+                                            label="Record page object"
+                                            placeholder="Choose an object"
+                                            options={objectOptions}
+                                            value={draft.parentObject}
+                                            field-level-help="The list appears on record pages of this object."
+                                            onchange={handleParentChange}
+                                        ></lightning-combobox>
+                                        <p class="slds-text-body_small slds-text-color_weak">{objectMatchText}</p>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                                        <lightning-combobox
+                                            data-id="relationship"
+                                            label="Related records"
+                                            placeholder="Choose related records"
+                                            options={relationshipOptions}
+                                            value={relationshipValue}
+                                            disabled={relationshipDisabled}
+                                            onchange={handleRelationshipChange}
+                                        ></lightning-combobox>
+                                        <p class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small" data-id="relationship-help">{relationshipHelp}</p>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="slds-m-bottom_medium" aria-labelledby="arl-columns">
+                                <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-bottom_x-small">
+                                    <h3 class="slds-text-heading_small" id="arl-columns">3. Columns</h3>
+                                    <lightning-button data-id="add-column" label="Add column" icon-name="utility:add" onclick={handleAddColumn} disabled={addColumnDisabled}></lightning-button>
+                                </div>
+                                <template lwc:if={showPicker}>
+                                    <c-arl-field-picker
+                                        class="slds-m-bottom_small"
+                                        root-object={draft.childObject}
+                                        root-label={childLabel}
+                                        used-paths={usedPaths}
+                                        onselect={handlePickerSelect}
+                                        oncancel={handlePickerCancel}
+                                    ></c-arl-field-picker>
+                                </template>
+                                <template lwc:if={hasColumns}>
+                                    <div class="slds-scrollable_x">
+                                        <table class="slds-table slds-table_bordered slds-table_cell-buffer" aria-labelledby="arl-columns" data-id="columns">
+                                            <thead>
+                                                <tr class="slds-line-height_reset">
+                                                    <th scope="col">#</th>
+                                                    <th scope="col">Field</th>
+                                                    <th scope="col">Column label</th>
+                                                    <th scope="col">Show</th>
+                                                    <th scope="col">Search</th>
+                                                    <th scope="col">Filter</th>
+                                                    <th scope="col">Sort</th>
+                                                    <th scope="col">Edit</th>
+                                                    <th scope="col"><span class="slds-assistive-text">Order and remove</span></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <template for:each={columnRows} for:item="col">
+                                                    <tr key={col.rowId} data-row={col.rowId}>
+                                                        <td>{col.position}</td>
+                                                        <th scope="row">
+                                                            <div class="slds-truncate" title={col.fieldPath}>{col.labelHint}</div>
+                                                            <div class="slds-text-body_small slds-text-color_weak">{col.fieldPath}</div>
+                                                            <template lwc:if={col.hasRowIssues}>
+                                                                <template for:each={col.rowIssues} for:item="issue">
+                                                                    <div key={issue.key} class={issue.className}>{issue.text}</div>
+                                                                </template>
+                                                            </template>
+                                                        </th>
+                                                        <td>
+                                                            <lightning-input variant="label-hidden" data-row={col.rowId} data-role="column-label" label={col.labelInputLabel} placeholder={col.labelPlaceholder} max-length="80" value={col.label} onchange={handleColumnLabel}></lightning-input>
+                                                        </td>
+                                                        <td><lightning-input type="checkbox" variant="label-hidden" data-row={col.rowId} data-flag="visible" label={col.visibleLabel} checked={col.visible} onchange={handleColumnFlag}></lightning-input></td>
+                                                        <td title={col.searchTitle}><lightning-input type="checkbox" variant="label-hidden" data-row={col.rowId} data-flag="searchable" label={col.searchLabel} checked={col.searchable} disabled={col.searchDisabled} onchange={handleColumnFlag}></lightning-input></td>
+                                                        <td title={col.filterTitle}><lightning-input type="checkbox" variant="label-hidden" data-row={col.rowId} data-flag="filterable" label={col.filterLabel} checked={col.filterable} disabled={col.filterDisabled} onchange={handleColumnFlag}></lightning-input></td>
+                                                        <td title={col.sortTitle}><lightning-input type="checkbox" variant="label-hidden" data-row={col.rowId} data-flag="sortable" label={col.sortLabel} checked={col.sortable} disabled={col.sortDisabled} onchange={handleColumnFlag}></lightning-input></td>
+                                                        <td title={col.editTitle}><lightning-input type="checkbox" variant="label-hidden" data-row={col.rowId} data-flag="editable" label={col.editLabel} checked={col.editable} disabled={col.editDisabled} onchange={handleColumnFlag}></lightning-input></td>
+                                                        <td>
+                                                            <lightning-button-group>
+                                                                <lightning-button-icon icon-name="utility:arrowup" data-index={col.index} data-direction="up" alternative-text={col.upLabel} title={col.upLabel} disabled={col.upDisabled} onclick={handleMove}></lightning-button-icon>
+                                                                <lightning-button-icon icon-name="utility:arrowdown" data-index={col.index} data-direction="down" alternative-text={col.downLabel} title={col.downLabel} disabled={col.downDisabled} onclick={handleMove}></lightning-button-icon>
+                                                                <lightning-button-icon icon-name="utility:delete" data-row={col.rowId} data-role="remove" alternative-text={col.removeLabel} title={col.removeLabel} onclick={handleRemove}></lightning-button-icon>
+                                                            </lightning-button-group>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                                <template lwc:else>
+                                    <p class="slds-text-color_weak" data-id="no-columns">No columns yet. Choose the related records, then click Add column.</p>
+                                </template>
+                            </section>
+
+                            <section class="slds-m-bottom_medium" aria-labelledby="arl-sort">
+                                <h3 class="slds-text-heading_small slds-m-bottom_x-small" id="arl-sort">4. Default order</h3>
+                                <div class="slds-grid slds-wrap slds-gutters_x-small">
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                                        <lightning-combobox data-id="sort-field" label="Sort by" options={sortOptions} value={sortValue} onchange={handleSortField}></lightning-combobox>
+                                    </div>
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                                        <lightning-radio-group data-id="sort-direction" label="Direction" type="button" options={directionOptions} value={draft.defaultSortDirection} disabled={sortDirectionDisabled} onchange={handleSortDirection}></lightning-radio-group>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <section class="slds-m-bottom_medium" aria-labelledby="arl-actions">
+                                <h3 class="slds-text-heading_small slds-m-bottom_x-small" id="arl-actions">5. Row actions</h3>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">Users also need the matching object permissions. Turning an action off hides it in this list only. The New button is set up with the other buttons in section 6.</p>
+                                <div class="slds-grid slds-wrap slds-gutters_x-small">
+                                    <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-3"><lightning-input type="checkbox" data-flag="allowEdit" label="Edit" checked={draft.allowEdit} onchange={handleActionFlag}></lightning-input></div>
+                                    <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-3"><lightning-input type="checkbox" data-flag="allowDelete" label="Delete" checked={draft.allowDelete} onchange={handleActionFlag}></lightning-input></div>
+                                    <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-3"><lightning-input type="checkbox" data-flag="allowBulkDelete" label="Delete selected rows" field-level-help="Users also need the Tekenable Advance Related List Bulk Delete permission set." checked={draft.allowBulkDelete} onchange={handleActionFlag}></lightning-input></div>
+                                </div>
+                            </section>
+
+                            <section class="slds-m-bottom_medium" aria-labelledby="arl-custom-actions">
+                                <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center slds-m-bottom_x-small">
+                                    <h3 class="slds-text-heading_small" id="arl-custom-actions">6. Buttons and row menu items</h3>
+                                    <lightning-button data-id="add-action" label="Add action" icon-name="utility:add" onclick={handleAddAction} disabled={addActionDisabled}></lightning-button>
+                                </div>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
+                                    The list header shows these in this order, including New. Use the arrows to reorder, Show as to make each one a button or a More menu item, and the bin to remove one (removing New hides it). Header actions run for the record page's record, row items for that row's record. Flows receive the ID in a text input variable named recordId. Up to 10 actions.
+                                </p>
+                                <template lwc:if={hasActions}>
+                                    <table class="slds-table slds-table_bordered slds-table_cell-buffer arl-actions-table" aria-labelledby="arl-custom-actions" data-id="actions">
+                                        <thead>
+                                            <tr class="slds-line-height_reset">
+                                                <th scope="col">#</th>
+                                                <th scope="col">Type</th>
+                                                <th scope="col">Where</th>
+                                                <th scope="col">Runs</th>
+                                                <th scope="col">Show as</th>
+                                                <th scope="col">Label</th>
+                                                <th scope="col"><span class="slds-assistive-text">Order and remove</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <template for:each={actionRows} for:item="action">
+                                                <tr key={action.rowId} data-row={action.rowId}>
+                                                    <td>{action.position}</td>
+                                                    <td class="arl-action-type">
+                                                        <lightning-combobox variant="label-hidden" dropdown-alignment="auto" data-row={action.rowId} data-role="action-type" label={action.typeLabel} options={typeOptions} value={action.actionType} onchange={handleActionType}></lightning-combobox>
+                                                    </td>
+                                                    <td class="arl-action-placement">
+                                                        <lightning-combobox variant="label-hidden" dropdown-alignment="auto" data-row={action.rowId} data-role="action-placement" label={action.placementLabel} options={placementOptions} value={action.placement} disabled={action.placementDisabled} onchange={handleActionPlacement}></lightning-combobox>
+                                                    </td>
+                                                    <td class="arl-action-target">
+                                                        <lightning-combobox variant="label-hidden" dropdown-alignment="auto" data-row={action.rowId} data-role="action-target" label={action.targetLabel} placeholder={action.targetPlaceholder} options={action.targetOptions} value={action.target} disabled={action.isStandard} onchange={handleActionTarget}></lightning-combobox>
+                                                        <template lwc:if={action.hasRowIssues}>
+                                                            <template for:each={action.rowIssues} for:item="issue">
+                                                                <div key={issue.key} class={issue.className}>{issue.text}</div>
+                                                            </template>
+                                                        </template>
+                                                    </td>
+                                                    <td class="arl-action-display">
+                                                        <lightning-combobox variant="label-hidden" dropdown-alignment="auto" data-row={action.rowId} data-role="action-display" label={action.displayLabel} options={action.rowDisplayOptions} value={action.displayValue} disabled={action.displayDisabled} onchange={handleActionDisplay}></lightning-combobox>
+                                                    </td>
+                                                    <td class="arl-action-label">
+                                                        <lightning-input variant="label-hidden" data-row={action.rowId} data-role="action-label" label={action.labelLabel} placeholder={action.labelPlaceholder} max-length="80" value={action.label} onchange={handleActionLabel}></lightning-input>
+                                                    </td>
+                                                    <td>
+                                                        <lightning-button-group>
+                                                            <lightning-button-icon icon-name="utility:arrowup" data-index={action.index} data-direction="up" data-role="action-move" alternative-text={action.upLabel} title={action.upLabel} disabled={action.upDisabled} onclick={handleActionMove}></lightning-button-icon>
+                                                            <lightning-button-icon icon-name="utility:arrowdown" data-index={action.index} data-direction="down" data-role="action-move" alternative-text={action.downLabel} title={action.downLabel} disabled={action.downDisabled} onclick={handleActionMove}></lightning-button-icon>
+                                                            <lightning-button-icon icon-name="utility:delete" data-row={action.rowId} data-role="action-remove" alternative-text={action.removeLabel} title={action.removeLabel} onclick={handleActionRemove}></lightning-button-icon>
+                                                        </lightning-button-group>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </template>
+                                <template lwc:else>
+                                    <p class="slds-text-color_weak" data-id="no-actions">No buttons. Click Add action to add New, a flow or a quick action.</p>
+                                </template>
+                            </section>
+
+                            <template lwc:if={hasIssues}>
+                                <div class="slds-m-bottom_small" data-id="issues">
+                                    <template lwc:if={issuesStale}>
+                                        <p class="slds-text-body_small slds-text-color_weak">These results are from before your latest changes. Check again.</p>
+                                    </template>
+                                    <template lwc:if={hasErrors}>
+                                        <div class="slds-scoped-notification slds-theme_error slds-m-bottom_x-small" role="alert">
+                                            <ul class="slds-list_dotted">
+                                                <template for:each={errors} for:item="issue">
+                                                    <li key={issue.message}>{issue.message}</li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                    <template lwc:if={hasWarnings}>
+                                        <div class="slds-scoped-notification slds-theme_warning" role="status">
+                                            <ul class="slds-list_dotted">
+                                                <template for:each={warnings} for:item="issue">
+                                                    <li key={issue.message}>{issue.message}</li>
+                                                </template>
+                                            </ul>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            <div class="slds-grid slds-grid_vertical-align-center slds-border_top slds-p-top_small">
+                                <lightning-button data-id="validate" label="Check for problems" onclick={handleValidate} disabled={isWorking}></lightning-button>
+                                <lightning-button class="slds-m-left_x-small" data-id="save" variant="brand" label="Save" onclick={handleSave} disabled={saveDisabled}></lightning-button>
+                                <template lwc:if={showDeploySpinner}>
+                                    <div class="slds-is-relative slds-m-left_medium arl-inline-spinner"><lightning-spinner alternative-text="Saving" size="x-small"></lightning-spinner></div>
+                                </template>
+                                <span class={statusClass} data-id="status" tabindex="-1" aria-live="polite">{saveMessage}</span>
+                            </div>
+                            <template lwc:if={savedKeyHint}>
+                                <p class="slds-m-top_x-small slds-text-body_small" data-id="placement-hint">
+                                    To use it, edit a record page in Lightning App Builder, add Tekenable Advance Related List, and choose <strong>{savedKeyHint}</strong> in List Definition Key.
+                                </p>
+                            </template>
+                        </template>
+                        <template lwc:else>
+                            <div class="slds-illustration slds-p-around_large slds-text-align_center" data-id="empty-editor">
+                                <p class="slds-text-heading_small">Choose a related list on the left, or create a new one.</p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </lightning-card>
+</template>

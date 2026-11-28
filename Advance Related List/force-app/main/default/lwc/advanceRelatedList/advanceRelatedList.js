@@ -1,1242 +1,1131 @@
-import { LightningElement, api, track, wire } from 'lwc';
+import { LightningElement, api } from 'lwc';
 import { NavigationMixin } from 'lightning/navigation';
-import { refreshApex } from '@salesforce/apex';
-import { getObjectInfo } from 'lightning/uiObjectInfoApi';
+import { deleteRecord } from 'lightning/uiRecordApi';
 import { encodeDefaultFieldValues } from 'lightning/pageReferenceUtils';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import USER_CURRENCY from '@salesforce/i18n/currency';
-import getRecords from '@salesforce/apex/RelatedListController.getRecords';
-import getUserPermissions from '@salesforce/apex/RelatedListController.getUserPermissions';
-import deleteRecord from '@salesforce/apex/RelatedListController.deleteRecord';
+import LightningConfirm from 'lightning/confirm';
+import { registerRefreshHandler, unregisterRefreshHandler } from 'lightning/refresh';
+import FORM_FACTOR from '@salesforce/client/formFactor';
+import USER_ID from '@salesforce/user/Id';
+import LOCALE from '@salesforce/i18n/locale';
+import getRows from '@salesforce/apex/RelatedListController.getRows';
+import deleteRows from '@salesforce/apex/RelatedListController.deleteRows';
+import EditModal from 'c/arlEditModal';
+import FlowModal from 'c/arlFlowModal';
+import { clampPageSize, describeFilter, reduceError, safeHexColor } from 'c/arlUtils';
 
-// ===== IMPORTS AND CONSTANTS =====
-const FIXED_WIDTH = {
-    number: 60,    // Width for row number column
-    action: 80    // Width for action column
+const SEARCH_DELAY_MS = 300;
+const STATUS_OK = 'OK';
+const STATUS_STALE = 'STALE_CURSOR';
+const DEFAULT_ICON = 'standard:related_list';
+
+const ROW_ACTIONS = {
+    view: { label: 'View', name: 'view' },
+    edit: { label: 'Edit', name: 'edit' },
+    delete: { label: 'Delete', name: 'delete' }
 };
 
-const actions = [
-    { label: 'View', name: 'view', iconName: 'utility:preview' },
-    { label: 'Edit', name: 'edit', iconName: 'utility:edit' },
-    { label: 'Delete', name: 'delete', iconName: 'utility:delete' }
-];
-
-
+/**
+ * Tekenable Advance Related List.
+ *
+ * Data comes only from RelatedListController.getRows, which re-validates the list definition (or
+ * the legacy App Builder properties) for the running user on every request. The browser never
+ * decides which records, fields or actions are allowed; hidden buttons are a convenience only.
+ */
 export default class AdvanceRelatedList extends NavigationMixin(LightningElement) {
-    
-    // ===== PROPERTIES =====
-    //@api Properties
+    // ===== PUBLIC PROPERTIES (names unchanged from v1) =====
     @api childObjectApiName;
-    @api parentObjectApiName;
+    @api parentObjectApiName; // kept for page compatibility; not used
     @api parentLookupField;
-    @api recordId;
     @api fieldsToDisplay = '';
     @api columnLabels = '';
     @api searchableFields = '';
+    @api sortableFields = '';
     @api recordsPerPage = 10;
     @api flowName;
     @api flowTitle = 'Run Flow';
     @api listTitle;
-    @api sortableFields = '';
     @api customIconName;
     @api iconBackgroundColor;
+    /** Set to stop keeping each user's filters and sort for this list across page refreshes. */
+    @api disableSavedFilters = false;
+    rememberNotice = '';
 
-    // @track properties
-    @track objectInfo;
-    @track data = [];
-    @track columns = [];
-    @track filteredData = [];
-    @track pageNumber = 1;
-    @track totalPages = 0;
-    @track isLoading = false;
-    @track error;
-    @track wiredRecordResult;
-    @track childObjectLabel;
-    @track selectedRows = [];
-    @track showFlowModal = false;
-    @track fieldLabelsMap = {};
-    @track sortedBy;
-    @track sortedDirection = 'asc';
-    @track showEditModal = false;
-    @track showDeleteModal = false;
-    @track selectedRecordId;
-    @track flowKey = Date.now();
-    @track flowInputVariables = [];
-    @track originalData = [];
-    @track searchTerm = '';
-    @track debouncedSearchTerm = '';
-    @track columnWidths = {};
-    @track showSettingsMenu = false;
-    @track defaultColumnWidth = 250; // Default width for columns
-    @track showBulkDeleteModal = false;
-    @track showBulkDeleteButton = false;
-    @track preSelectedRows = [];
-    @track userCurrency = USER_CURRENCY;
-    @track permissionError = false;
-    @track permissionErrorMessage = '';
-    @track userPermissions = {
-        isCreateable: false,
-        isUpdateable: false,
-        isDeletable: false
-    };
-    @track showFilterPanel = false;
-    @track activeFilters = [];
+    _recordId;
+    _listDefinition;
 
-    //private properties
-    searchTimeout;
-    maxRowSelection = 100; // or whatever maximum number you want to allow
-
-    // Add these methods
-    handleFilterClick() {
-        this.showFilterPanel = !this.showFilterPanel;
+    /** Parent record id (set by the record page). Changing it resets the list. */
+    @api
+    get recordId() {
+        return this._recordId;
+    }
+    set recordId(value) {
+        const changed = value !== this._recordId;
+        this._recordId = value;
+        if (changed && this._connected) {
+            this.resetAndLoad();
+        }
     }
 
-    handleFilterChange(event) {
-        this.activeFilters = event.detail;
-        this.pageNumber = 1; // Reset to first page
-        this.handleRefresh();
+    /** DeveloperName of an Tekenable Advance Related List definition (Custom Metadata). */
+    @api
+    get listDefinition() {
+        return this._listDefinition;
+    }
+    set listDefinition(value) {
+        const changed = value !== this._listDefinition;
+        this._listDefinition = value;
+        if (changed && this._connected) {
+            this.restoreState();
+            this.resetAndLoad();
+        }
     }
 
+    // ===== STATE =====
+    _connected = false;
+    isLoading = false;
+    hasLoaded = false;
+    status;
+    message;
+    context;
+    columnInfo = [];
+    rows = [];
+    totalCount;
+    totalCountCapped = false;
+    hasMore = false;
+    cursors = [null];
+    pageIndex = 0;
 
+    searchInput = '';
+    appliedSearch = '';
+    filters = [];
+    filterLogic = 'AND';
+    showFilters = false;
+    sortKey;
+    sortDirection;
+    userSorted = false;
 
+    selectedIds = [];
+    columnWidths = {};
+    rowErrors = [];
+    announcement = '';
 
-    // ===== GETTERS =====
-    get hasIcon() {
-        return this.customIconName || this.objectIconName;
+    requestSeq = 0;
+    searchTimer;
+    staleRetry = false;
+
+    isSmall = FORM_FACTOR === 'Small';
+
+    // ===== LIFECYCLE =====
+
+    connectedCallback() {
+        this._connected = true;
+        this.restoreState();
+        // Refresh when the record page refreshes (for example after a quick action or edit saves).
+        this.refreshHandlerId = registerRefreshHandler(this, this.handlePageRefresh.bind(this));
+        this.load();
     }
+
+    disconnectedCallback() {
+        this._connected = false;
+        clearTimeout(this.searchTimer);
+        this.requestSeq++; // ignore responses that arrive after removal
+        if (this.refreshHandlerId) {
+            unregisterRefreshHandler(this.refreshHandlerId);
+        }
+    }
+
+    handlePageRefresh() {
+        return this.refresh().then(() => true);
+    }
+
+    // ===== REMEMBERED FILTERS =====
+    // Stored per user and per list (not per record) in this browser only. Values are validated by
+    // the server like any other request; anything it rejects is forgotten automatically.
+
+    restoredState = false;
+
+    get storageKey() {
+        const definition = this._listDefinition && String(this._listDefinition).trim();
+        const list = definition
+            ? `def:${definition}`
+            : `legacy:${this.childObjectApiName}:${this.parentLookupField}:${(this.fieldsToDisplay || '').replace(/\s/g, '')}`;
+        return `arl:v1:${USER_ID}:${list}`;
+    }
+
+    get rememberEnabled() {
+        return !(this.disableSavedFilters === true || this.disableSavedFilters === 'true');
+    }
+
+    readStore() {
+        try {
+            return window.localStorage;
+        } catch {
+            return null;
+        }
+    }
+
+    restoreState() {
+        this.restoredState = false;
+        if (!this.rememberEnabled) {
+            return;
+        }
+        const store = this.readStore();
+        let saved = null;
+        try {
+            saved = store ? JSON.parse(store.getItem(this.storageKey) || 'null') : null;
+        } catch {
+            saved = null;
+        }
+        if (!saved || typeof saved !== 'object') {
+            return;
+        }
+        const filters = Array.isArray(saved.filters)
+            ? saved.filters
+                  .filter((f) => f && typeof f.columnKey === 'string' && typeof f.operator === 'string')
+                  .slice(0, 20)
+                  .map((f) => ({ columnKey: f.columnKey, operator: f.operator, value: f.value === null || f.value === undefined ? null : String(f.value) }))
+            : [];
+        this.filters = filters;
+        this.filterLogic = saved.logic === 'OR' ? 'OR' : 'AND';
+        if (typeof saved.sortKey === 'string' && saved.sortKey) {
+            this.sortKey = saved.sortKey;
+            this.sortDirection = saved.sortDirection === 'desc' ? 'desc' : 'asc';
+            this.userSorted = true;
+        }
+        this.restoredState = filters.length > 0 || this.userSorted;
+    }
+
+    persistState() {
+        if (!this.rememberEnabled) {
+            return;
+        }
+        const store = this.readStore();
+        if (!store) {
+            return;
+        }
+        try {
+            if (!this.filters.length && !this.userSorted) {
+                store.removeItem(this.storageKey);
+                return;
+            }
+            store.setItem(
+                this.storageKey,
+                JSON.stringify({
+                    filters: this.filters.map((f) => ({ columnKey: f.columnKey, operator: f.operator, value: f.value })),
+                    logic: this.filterLogic,
+                    sortKey: this.userSorted ? this.sortKey : null,
+                    sortDirection: this.userSorted ? this.sortDirection : null
+                })
+            );
+        } catch {
+            // storage full or blocked: the list still works, it just won't remember
+        }
+    }
+
+    forgetState() {
+        const store = this.readStore();
+        try {
+            if (store) {
+                store.removeItem(this.storageKey);
+            }
+        } catch {
+            // ignore
+        }
+        this.restoredState = false;
+    }
+
+    get showRememberedNote() {
+        return this.rememberEnabled && (this.filters.length > 0 || this.userSorted);
+    }
+
+    // ===== PUBLIC API =====
+
+    /**
+     * Reloads the list from the first page (fresh total). Unchanged public method name.
+     * @returns {Promise<void>}
+     */
+    @api
+    refresh() {
+        this.pageIndex = 0;
+        this.cursors = [null];
+        return this.load();
+    }
+
+    // ===== DATA LOADING =====
+
+    get pageSize() {
+        return clampPageSize(this.recordsPerPage);
+    }
+
+    buildRequest() {
+        const usesDefinition = Boolean(this._listDefinition && String(this._listDefinition).trim());
+        return {
+            definitionKey: usesDefinition ? String(this._listDefinition).trim() : null,
+            parentId: this._recordId || null,
+            legacy: usesDefinition
+                ? null
+                : {
+                      childObjectApiName: this.childObjectApiName,
+                      parentLookupField: this.parentLookupField,
+                      fieldsToDisplay: this.fieldsToDisplay,
+                      searchableFields: this.searchableFields,
+                      sortableFields: this.sortableFields,
+                      columnLabels: this.columnLabels,
+                      flowName: this.flowName
+                  },
+            searchTerm: this.appliedSearch || null,
+            filters: this.filters.map((f) => ({ columnKey: f.columnKey, operator: f.operator, value: f.value })),
+            filterLogic: this.filterLogic,
+            sortKey: this.userSorted ? this.sortKey : null,
+            sortDirection: this.userSorted ? this.sortDirection : null,
+            pageSize: this.pageSize,
+            cursor: this.cursors[this.pageIndex] || null
+        };
+    }
+
+    async load() {
+        const seq = ++this.requestSeq;
+        this.isLoading = true;
+        try {
+            const response = await getRows({ request: this.buildRequest() });
+            if (seq !== this.requestSeq) {
+                return; // a newer request superseded this one
+            }
+            if (response && response.status === STATUS_STALE && !this.staleRetry) {
+                this.staleRetry = true;
+                this.pageIndex = 0;
+                this.cursors = [null];
+                this.clearSelection();
+                await this.load();
+                return;
+            }
+            this.staleRetry = false;
+            this.applyResponse(response);
+        } catch (error) {
+            if (seq !== this.requestSeq) {
+                return;
+            }
+            this.status = 'ERROR';
+            this.message = reduceError(error);
+            this.rows = [];
+        } finally {
+            if (seq === this.requestSeq) {
+                this.isLoading = false;
+                this.hasLoaded = true;
+            }
+        }
+    }
+
+    applyResponse(response) {
+        if (response && response.status === 'INPUT_ERROR' && this.restoredState) {
+            // Remembered filters or sort no longer fit this list (an admin changed it): forget them.
+            this.forgetState();
+            this.filters = [];
+            this.filterLogic = 'AND';
+            this.userSorted = false;
+            this.sortKey = undefined;
+            this.sortDirection = undefined;
+            this.rememberNotice = 'Your saved filters no longer match this list, so they were cleared.';
+            this.resetAndLoad();
+            return;
+        }
+        this.restoredState = false;
+        this.status = response ? response.status : 'ERROR';
+        this.message = response ? response.message : 'Something went wrong. Try again.';
+        if (this.status !== STATUS_OK) {
+            this.rows = [];
+            this.columnInfo = [];
+            this.context = undefined;
+            this.totalCount = undefined;
+            this.hasMore = false;
+            this.clearSelection();
+            this.announce(this.message);
+            return;
+        }
+        this.context = response.context;
+        this.columnInfo = response.columns || [];
+        if (!this.userSorted) {
+            this.sortKey = response.context.sortKey;
+            this.sortDirection = response.context.sortDirection;
+        }
+        if (response.totalCount !== undefined && response.totalCount !== null) {
+            this.totalCount = response.totalCount;
+            this.totalCountCapped = Boolean(response.totalCountCapped);
+        }
+        this.hasMore = Boolean(response.hasMore);
+        const cursors = this.cursors.slice(0, this.pageIndex + 1);
+        if (response.nextCursor) {
+            cursors[this.pageIndex + 1] = response.nextCursor;
+        }
+        this.cursors = cursors;
+        this.rows = (response.rows || []).map((row) => this.toDisplayRow(row));
+        const present = new Set(this.rows.map((r) => r.id));
+        this.selectedIds = this.selectedIds.filter((id) => present.has(id));
+        this.announce(this.rangeText);
+    }
+
+    toDisplayRow(row) {
+        const display = { ...row };
+        this.columnInfo.forEach((col) => {
+            const linkId = row[`${col.key}__id`];
+            if (linkId) {
+                display[`${col.key}__url`] = `/lightning/r/${linkId}/view`;
+            }
+            if (col.type === 'percent' && typeof row[col.key] === 'number') {
+                display[col.key] = row[col.key] / 100;
+            }
+        });
+        return display;
+    }
+
+    resetAndLoad() {
+        this.pageIndex = 0;
+        this.cursors = [null];
+        this.totalCount = undefined;
+        this.rowErrors = [];
+        this.clearSelection();
+        this.load();
+    }
+
+    // ===== GETTERS: HEADER =====
 
     get iconName() {
-        return this.customIconName || this.objectIconName || 'standard:custom';
+        return this.customIconName || DEFAULT_ICON;
     }
 
     get iconStyle() {
-        return `background-color: ${this.iconBackgroundColor || '#f4b400'}`;
+        const color = safeHexColor(this.iconBackgroundColor);
+        return color ? `background-color: ${color}; border-radius: 0.25rem;` : '';
     }
 
-    get fieldsArray() {
-        return this.fieldsToDisplay.split(',').map(field => field.trim());
+    get objectLabelPlural() {
+        return (this.context && this.context.objectLabelPlural) || 'Records';
     }
 
-    get sortableFieldsArray() {
-        return this.sortableFields ? this.sortableFields.split(',').map(field => field.trim()) : [];
+    get title() {
+        return this.listTitle || this.objectLabelPlural;
     }
 
-    get columnLabelsArray() {
-        return this.columnLabels ? this.columnLabels.split(',').map(label => label.trim()) : [];
+    get countLabel() {
+        if (this.totalCount === undefined || this.totalCount === null) {
+            return '';
+        }
+        const formatted = new Intl.NumberFormat(LOCALE).format(this.totalCount);
+        return this.totalCountCapped ? `(${formatted}+)` : `(${formatted})`;
     }
 
-    get searchableFieldsArray() {
-        return this.searchableFields.split(',').map(field => field.trim());
+    get searchLabel() {
+        return `Search ${this.objectLabelPlural}`;
     }
 
-    get displayTitle() {
-        const totalRecords = this.wiredRecordResult?.data?.totalRecords || 0;
-        return `${this.listTitle || `Related ${this.childObjectLabel}`} (${totalRecords})`;
+    get hasSearchableColumns() {
+        return this.columnInfo.some((c) => c.searchable);
     }
 
-    get hasFlowName() {
-        return this.flowName && this.flowName.trim().length > 0;
+    get filterableColumns() {
+        return this.columnInfo.filter((c) => c.filterable);
     }
 
-    get showFlowButton() {
-        // Only show flow button if:
-        // 1. Flow name is configured
-        // 2. User has update permission (since flows typically modify records)
-        return this.hasFlowName && this.userPermissions.isUpdateable;
+    get hasFilterableColumns() {
+        return this.filterableColumns.length > 0;
     }
 
-    get editFormFields() {
-        return this.editableFields?.map(field => field.fieldApiName) || [];
+    get filterButtonVariant() {
+        return this.filters.length ? 'border-filled' : 'border';
     }
+
+    get filterButtonLabel() {
+        return this.filters.length ? `Filters (${this.filters.length} active)` : 'Filters';
+    }
+
+    get canCreate() {
+        return Boolean(this.context && this.context.canCreate);
+    }
+
+    get canBulkDelete() {
+        return Boolean(this.context && this.context.canBulkDelete) && !this.isSmall;
+    }
+
+    // ----- configured actions (flows and quick actions) -----
+
+    get configuredActions() {
+        return (this.context && this.context.actions) || [];
+    }
+
+    actionLabel(action) {
+        if (action.label) {
+            return action.label;
+        }
+        return action.type === 'flow' ? this.flowTitle || 'Run Flow' : action.target;
+    }
+
+    get listActions() {
+        const icons = { flow: 'utility:flow', quickAction: 'utility:quick_text' };
+        return this.configuredActions
+            .filter((a) => a.placement === 'list')
+            .map((a) => ({
+                ...a,
+                displayLabel: this.actionLabel(a),
+                dataKey: a.key,
+                dataId: a.type === 'standard' ? 'new' : 'header-action',
+                iconName: icons[a.type]
+            }));
+    }
+
+    /**
+     * Header actions in the admin's order. Each is a button or a More-menu item as configured;
+     * actions without a choice follow the original rule (the first two are buttons).
+     */
+    get headerLayout() {
+        const buttons = [];
+        const menu = [];
+        this.listActions.forEach((a) => {
+            const asButton = a.display === 'button' || (a.display !== 'menu' && buttons.length < 2);
+            (asButton ? buttons : menu).push(a);
+        });
+        return { buttons, menu };
+    }
+
+    get headerButtons() {
+        return this.headerLayout.buttons;
+    }
+
+    get headerMenuActions() {
+        return this.headerLayout.menu;
+    }
+
+    get hasHeaderMenu() {
+        return this.headerMenuActions.length > 0;
+    }
+
+    get hasHeaderGroup() {
+        return this.headerButtons.length > 0 || this.hasHeaderMenu || this.canBulkDelete;
+    }
+
+    get rowCustomActions() {
+        return this.configuredActions.filter((a) => a.placement === 'row').map((a) => ({ label: this.actionLabel(a), name: `action:${a.key}` }));
+    }
+
+    get bulkDeleteLabel() {
+        return `Delete selected (${this.selectedIds.length})`;
+    }
+
+    get bulkDeleteDisabled() {
+        return this.selectedIds.length === 0 || this.isLoading;
+    }
+
+    get maxRowSelection() {
+        const max = (this.context && this.context.maxDeleteBatch) || 100;
+        return Math.min(max, this.pageSize);
+    }
+
+    get showSettingsMenu() {
+        return !this.isSmall;
+    }
+
+    get ariaBusy() {
+        return this.isLoading ? 'true' : 'false';
+    }
+
+    // ===== GETTERS: STATES =====
+
+    get isOk() {
+        return this.status === STATUS_OK;
+    }
+
+    get isConfigError() {
+        return this.status === 'CONFIG_ERROR';
+    }
+
+    get isAccessError() {
+        return this.status === 'ACCESS_ERROR';
+    }
+
+    get isInputError() {
+        return this.status === 'INPUT_ERROR';
+    }
+
+    get isGenericError() {
+        return this.status === 'ERROR';
+    }
+
+    get showInitialSpinner() {
+        return this.isLoading && !this.hasLoaded;
+    }
+
+    get hasRows() {
+        return this.isOk && this.rows.length > 0;
+    }
+
+    get hasCriteria() {
+        return Boolean(this.appliedSearch) || this.filters.length > 0;
+    }
+
+    get isEmpty() {
+        return this.isOk && this.rows.length === 0 && !this.hasCriteria;
+    }
+
+    get isNoMatch() {
+        return this.isOk && this.rows.length === 0 && this.hasCriteria;
+    }
+
+    get emptyText() {
+        return `No ${this.objectLabelPlural.toLowerCase()} yet.`;
+    }
+
+    get hasOmittedColumns() {
+        return Boolean(this.context && this.context.omittedColumnCount > 0);
+    }
+
+    get activeFilterPills() {
+        return this.filters.map((f, index) => ({ key: `${f.columnKey}-${index}`, index, label: describeFilter(f, this.columnInfo) }));
+    }
+
+    get hasActiveFilters() {
+        return this.filters.length > 0;
+    }
+
+    get logicText() {
+        return this.filterLogic === 'OR' ? 'Matching any condition' : 'Matching all conditions';
+    }
+
+    get hasRowErrors() {
+        return this.rowErrors.length > 0;
+    }
+
+    // ===== GETTERS: TABLE =====
+
+    get datatableColumns() {
+        const actions = this.rowActions;
+        const cols = this.columnInfo.filter((c) => c.visible).map((c) => this.toDatatableColumn(c));
+        if (actions.length) {
+            cols.push({ type: 'action', typeAttributes: { rowActions: actions, menuAlignment: 'auto' } });
+        }
+        return cols;
+    }
+
+    toDatatableColumn(col) {
+        const base = {
+            label: col.label,
+            fieldName: col.key,
+            sortable: Boolean(col.sortable),
+            wrapText: true,
+            hideDefaultActions: true
+        };
+        if (this.columnWidths[col.key]) {
+            base.initialWidth = this.columnWidths[col.key];
+        }
+        switch (col.type) {
+            case 'name':
+            case 'link':
+                return {
+                    ...base,
+                    type: 'url',
+                    fieldName: `${col.key}__url`,
+                    typeAttributes: { label: { fieldName: col.key }, target: '_self', tooltip: { fieldName: col.key } }
+                };
+            case 'email':
+            case 'phone':
+            case 'url':
+            case 'boolean':
+                return { ...base, type: col.type };
+            case 'number':
+                return { ...base, type: 'number', typeAttributes: { maximumFractionDigits: col.scale || 0 }, cellAttributes: { alignment: 'right' } };
+            case 'currency':
+                return {
+                    ...base,
+                    type: 'currency',
+                    typeAttributes: { currencyCode: { fieldName: `${col.key}__cur` }, currencyDisplayAs: 'symbol' },
+                    cellAttributes: { alignment: 'right' }
+                };
+            case 'percent':
+                return { ...base, type: 'percent', typeAttributes: { maximumFractionDigits: col.scale || 0 }, cellAttributes: { alignment: 'right' } };
+            case 'date':
+                return { ...base, type: 'date-local', typeAttributes: { year: 'numeric', month: 'short', day: '2-digit' } };
+            case 'datetime':
+                return {
+                    ...base,
+                    type: 'date',
+                    typeAttributes: { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+                };
+            default:
+                return { ...base, type: 'text' };
+        }
+    }
+
+    get rowActions() {
+        if (!this.context) {
+            return [];
+        }
+        const actions = [ROW_ACTIONS.view];
+        if (this.context.canEdit) {
+            actions.push(ROW_ACTIONS.edit);
+        }
+        if (this.context.canDelete) {
+            actions.push(ROW_ACTIONS.delete);
+        }
+        return [...actions, ...this.rowCustomActions];
+    }
+
+    get datatableSortedBy() {
+        const col = this.columnInfo.find((c) => c.key === this.sortKey && c.visible);
+        if (!col) {
+            return undefined;
+        }
+        return col.type === 'name' || col.type === 'link' ? `${col.key}__url` : col.key;
+    }
+
+    get rowNumberOffset() {
+        return this.pageIndex * this.pageSize;
+    }
+
+    get hideCheckboxColumn() {
+        return !this.canBulkDelete;
+    }
+
+    // ===== GETTERS: SMALL SCREEN =====
+
+    get cards() {
+        const visible = this.columnInfo.filter((c) => c.visible);
+        const titleCol = visible.find((c) => c.type === 'name') || visible[0];
+        const detailCols = visible.filter((c) => c !== titleCol).slice(0, 3);
+        return this.rows.map((row) => ({
+            id: row.id,
+            title: titleCol && row[titleCol.key] !== undefined ? String(row[titleCol.key]) : row.id,
+            menuLabel: `Actions for ${titleCol && row[titleCol.key] !== undefined ? row[titleCol.key] : 'record'}`,
+            details: detailCols.map((c) => ({ key: c.key, label: c.label, value: this.plainText(c, row[c.key]) }))
+        }));
+    }
+
+    plainText(col, value) {
+        if (value === undefined || value === null) {
+            return '';
+        }
+        if (col.type === 'boolean') {
+            return value ? 'Yes' : 'No';
+        }
+        if (col.type === 'currency' || col.type === 'number' || col.type === 'percent') {
+            return new Intl.NumberFormat(LOCALE).format(value);
+        }
+        return String(value);
+    }
+
+    get sortOptions() {
+        return this.columnInfo.filter((c) => c.sortable && c.visible).map((c) => ({ label: c.label, value: c.key }));
+    }
+
+    get hasSortOptions() {
+        return this.sortOptions.length > 0;
+    }
+
+    get directionOptions() {
+        return [
+            { label: 'Ascending', value: 'asc' },
+            { label: 'Descending', value: 'desc' }
+        ];
+    }
+
+    // ===== GETTERS: PAGINATION =====
 
     get isFirstPage() {
-        return this.pageNumber === 1;
+        return this.pageIndex === 0 || this.isLoading;
     }
 
     get isLastPage() {
-        return this.pageNumber === this.totalPages;
+        return !this.hasMore || this.isLoading;
     }
 
-    get totalPages() {
-        if (this.wiredRecordResult?.data?.totalRecords) {
-            return Math.ceil(this.wiredRecordResult.data.totalRecords / this.recordsPerPage);
-        }
-        return 0;
+    get showPagination() {
+        return this.isOk && (this.pageIndex > 0 || this.hasMore);
     }
 
-    getActions() {
-        let actions = [];
-        
-        // Always show View
-        actions.push({ label: 'View', name: 'view', iconName: 'utility:preview' });
-        
-        // Show Edit only if user has update permission
-        if (this.userPermissions.isUpdateable) {
-            actions.push({ label: 'Edit', name: 'edit', iconName: 'utility:edit' });
+    get rangeText() {
+        if (!this.isOk) {
+            return '';
         }
-        
-        // Show Delete only if user has delete permission
-        if (this.userPermissions.isDeletable) {
-            actions.push({ label: 'Delete', name: 'delete', iconName: 'utility:delete' });
+        if (this.rows.length === 0) {
+            return this.hasCriteria ? 'No records match your search or filters.' : this.emptyText;
         }
-        
-        return actions;
+        const nf = new Intl.NumberFormat(LOCALE);
+        const start = this.pageIndex * this.pageSize + 1;
+        const end = start + this.rows.length - 1;
+        if (this.totalCount === undefined || this.totalCount === null) {
+            return `Showing ${nf.format(start)}–${nf.format(end)}`;
+        }
+        const total = nf.format(this.totalCount) + (this.totalCountCapped ? '+' : '');
+        return `Showing ${nf.format(start)}–${nf.format(end)} of ${total}`;
     }
 
-    //WIRE SERVICES
-    @wire(getObjectInfo, { objectApiName: '$childObjectApiName' })
-    wiredObjectInfo({ error, data }) {
-        if (data) {
-
-            
-            // Debug currency fields specifically
-            const currencyFields = Object.entries(data.fields)
-                .filter(([_, field]) => field.dataType === 'Currency')
-                .map(([name, field]) => ({
-                    name,
-                    dataType: field.dataType,
-                    label: field.label,
-                    defaultCurrencyCode: field.defaultCurrencyCode,
-                    updateable: field.updateable,
-                    calculated: field.calculated
-                }));
-            
-            this.objectInfo = data;
-            this.childObjectLabel = data.label;
-            this.objectIconName = this.customIconName || data.themeInfo?.iconUrl;
-            
-            // Get all fields metadata for edit form with more detail
-            const fields = data.fields;
-            this.editableFields = Object.keys(fields)
-                .filter(fieldApi => {
-                    const field = fields[fieldApi];
-                    return field.updateable && !field.computed;
-                })
-                .map(fieldApi => ({
-                    fieldApiName: fieldApi,
-                    required: fields[fieldApi].required,
-                    label: fields[fieldApi].label,
-                    dataType: fields[fieldApi].dataType,
-                    defaultCurrencyCode: fields[fieldApi].defaultCurrencyCode,
-                    updateable: fields[fieldApi].updateable,
-                    calculated: fields[fieldApi].calculated
-                }));
-    
-            
-            
-            // Initialize columns after complete field analysis
-            this.initializeColumns();
-        } else if (error) {
-            console.error('Error loading object info:', error);
-            console.error('Error details:', JSON.stringify(error));
+    get pageText() {
+        const page = this.pageIndex + 1;
+        if (this.totalCount && !this.totalCountCapped) {
+            return `Page ${page} of ${Math.max(1, Math.ceil(this.totalCount / this.pageSize))}`;
         }
+        return `Page ${page}`;
     }
 
-    @wire(getRecords, {
-        childObject: '$childObjectApiName',
-        parentLookupField: '$parentLookupField',
-        parentId: '$recordId',
-        fields: '$fieldsArray',
-        pageSize: '$recordsPerPage',
-        pageNumber: '$pageNumber',
-        searchTerm: '$debouncedSearchTerm',
-        searchableFields: '$searchableFieldsArray',
-        filters: '$activeFilters'
-    })
-    wiredRecords(result) {
-        this.wiredRecordResult = result;
-        this.isLoading = true;
-        
-        if (result.data) {
-            this.processRecords(result.data);
-            this.error = undefined;
-            this.permissionError = false;
-            this.permissionErrorMessage = '';
-        } else if (result.error) {
-            if (result.error.body && result.error.body.message && result.error.body.message.includes('Insufficient permissions')) {
-                this.permissionError = true;
-                this.permissionErrorMessage = result.error.body.message;
-            } else {
-                this.handleError(result.error);
+    // ===== HANDLERS: SEARCH / FILTER / SORT =====
+
+    handleSearchInput(event) {
+        this.searchInput = event.target.value || '';
+        clearTimeout(this.searchTimer);
+        // eslint-disable-next-line @lwc/lwc/no-async-operation
+        this.searchTimer = setTimeout(() => {
+            const next = this.searchInput.trim();
+            if (next !== this.appliedSearch) {
+                this.appliedSearch = next;
+                this.resetAndLoad();
             }
-        }
-        
-        this.isLoading = false;
+        }, SEARCH_DELAY_MS);
     }
 
-    @wire(getUserPermissions, { objectName: '$childObjectApiName' })
-    wiredPermissions({ error, data }) {
-        if (data) {
-            this.userPermissions = data;
-            // Update actions based on permissions
-            this.initializeColumns();
-        } else if (error) {
-            console.error('Error getting permissions:', error);
-        }
+    handleToggleFilters() {
+        this.showFilters = !this.showFilters;
     }
 
-       // LIFECYCLE HOOKS
-       connectedCallback() {
-        // Initialize columns
-        this.initializeColumns();
-        
-        // Add debounced resize handler
-        this.handleResize = this.debounce(() => {
-            this.initializeColumns();
-            this.updateTableResponsiveness();
-        }, 250);
-        
-        window.addEventListener('resize', this.handleResize);
-        
-        // Add click outside listener for settings menu
-        this.handleClickOutside = (event) => {
-            const settingsMenu = this.template.querySelector('.settings-dropdown');
-            const settingsButton = this.template.querySelector('.settings-button');
-            
-            if (this.showSettingsMenu && 
-                settingsMenu && 
-                settingsButton && 
-                !settingsMenu.contains(event.target) && 
-                !settingsButton.contains(event.target)) {
-                this.showSettingsMenu = false;
-            }
-        };
-        
-        document.addEventListener('click', this.handleClickOutside);
-        
-        // Initial table responsiveness update
-        this.updateTableResponsiveness();
+    handleFilterApply(event) {
+        this.filters = event.detail.filters;
+        this.filterLogic = event.detail.logic === 'OR' ? 'OR' : 'AND';
+        this.showFilters = false;
+        this.rememberNotice = '';
+        this.persistState();
+        this.resetAndLoad();
+        this.focusFilterButton();
     }
 
-        disconnectedCallback() {
-        // Remove window resize listener
-        if (this.handleResize) {
-            window.removeEventListener('resize', this.handleResize);
-        }
-        
-        // Remove document click listener
-        if (this.handleClickOutside) {
-            document.removeEventListener('click', this.handleClickOutside);
+    handleFilterCancel() {
+        this.showFilters = false;
+        this.focusFilterButton();
+    }
+
+    handleRemoveFilter(event) {
+        const index = Number(event.currentTarget.dataset.index);
+        this.filters = this.filters.filter((_, i) => i !== index);
+        this.persistState();
+        this.resetAndLoad();
+        this.focusFilterButton();
+    }
+
+    handleClearAll() {
+        clearTimeout(this.searchTimer);
+        this.filters = [];
+        this.filterLogic = 'AND';
+        this.appliedSearch = '';
+        this.searchInput = '';
+        this.showFilters = false;
+        this.rememberNotice = '';
+        this.persistState();
+        this.resetAndLoad();
+        const search = this.template.querySelector('[data-id="search"]');
+        if (search) {
+            search.value = '';
+            search.focus();
         }
     }
 
-    // Table Events
     handleSort(event) {
-        const { fieldName: sortedBy, sortDirection } = event.detail;
-        console.log('Sort triggered:', { sortedBy, sortDirection });
-        this.sortedBy = sortedBy;
-        this.sortedDirection = sortDirection;
-    
-        let clonedData = [...this.filteredData];
-        
-        clonedData.sort((a, b) => {
-            let valueA, valueB;
-            
-            // Handle relationship fields
-            if (sortedBy.includes('_url')) {
-                // Remove _url suffix to get the base field name
-                const baseField = sortedBy.replace('_url', '');
-                if (baseField.includes('.')) {
-                    const [relationshipField, field] = baseField.split('.');
-                    valueA = a[relationshipField] ? a[relationshipField][field] : '';
-                    valueB = b[relationshipField] ? b[relationshipField][field] : '';
-                }
-            } else if (sortedBy.includes('.')) {
-                const [relationshipField, field] = sortedBy.split('.');
-                valueA = a[relationshipField] ? a[relationshipField][field] : '';
-                valueB = b[relationshipField] ? b[relationshipField][field] : '';
-            } else {
-                valueA = sortedBy === 'nameUrl' ? a.Name : a[sortedBy];
-                valueB = sortedBy === 'nameUrl' ? b.Name : b[sortedBy];
-            }
-            
-            // Handle null or empty values
-            if (!valueA && valueA !== 0) return 1;
-            if (!valueB && valueB !== 0) return -1;
-            if (valueA === valueB) return 0;
-            
-            // String comparison
-            if (typeof valueA === 'string') {
-                valueA = valueA.toLowerCase();
-                valueB = valueB.toLowerCase();
-            }
-            
-            // Simple comparison
-            return sortDirection === 'asc' 
-                ? (valueA > valueB ? 1 : -1)
-                : (valueA > valueB ? -1 : 1);
-        });
-    
-        // Always reassign row numbers after sorting
-        const startingNumber = (this.pageNumber - 1) * this.recordsPerPage + 1;
-        this.filteredData = clonedData.map((record, index) => ({
-            ...record,
-            rowNumber: startingNumber + index
-        }));
-    }
-
-    handleRowAction(event) {
-        const action = event.detail.action;
-        const row = event.detail.row;
-    
-        if (action.name === 'edit' || action.name === 'delete' || action.name === 'view') {
-            this.selectedRecordId = row.Id;
-    
-            switch (action.name) {
-                case 'view':
-                    this.navigateToRecord();
-                    break;
-                case 'edit':
-                    this.showEditModal = true;
-                    break;
-                case 'delete':
-                    this.showDeleteModal = true;
-                    break;
-            }
-        } 
-        // Handle email field click
-        else if (action.name && action.name.toLowerCase().includes('email')) {
-            const email = row[action.name];
-            if (email) {
-                window.location.href = `mailto:${email}`;
-            }
-        }
-        // Handle phone field click
-        else if (action.name && (action.name.toLowerCase().includes('phone') || action.name.toLowerCase().includes('mobile'))) {
-            const phone = row[action.name];
-            if (phone) {
-                // Using NavigationMixin to handle phone
-                this[NavigationMixin.Navigate]({
-                    type: 'standard__webPage',
-                    attributes: {
-                        url: `tel:${phone.replace(/\D/g, '')}`
-                    }
-                });
-            }
-        }
-    }
-
-    handleRowSelection(event) {
-        // Get the selected rows from the event
-        const selectedRows = event.detail.selectedRows;
-        
-        // Store the IDs of selected rows
-        this.preSelectedRows = selectedRows.map(row => row.Id);
-        
-        // Store the full selected row data
-        this.selectedRows = selectedRows;
-        
-        // Show/hide bulk delete button
-        this.showBulkDeleteButton = this.selectedRows.length > 0;
-        
-        // Debug logging
-        console.log('Number of selected rows:', this.selectedRows.length);
-        console.log('Selected row IDs:', this.preSelectedRows);
-    }
-
-    handleColumnResize(event) {
-        const columnName = event.detail.columnName;
-        const newWidth = event.detail.width;
-        
-        // Store the new width in our tracking object
-        this.columnWidths[columnName] = newWidth;
-        
-        // Update the column definition
-        this.columns = this.columns.map(column => {
-            if (column.fieldName === columnName) {
-                return { ...column, initialWidth: newWidth };
-            }
-            return column;
-        });
-    }
-
-    handleSearch(event) {
-        this.searchTerm = event.target.value;
-        
-        // Clear any existing timeout
-        if (this.searchTimeout) {
-            clearTimeout(this.searchTimeout);
-        }
-        
-        // Set a new timeout
-        this.searchTimeout = setTimeout(() => {
-            this.debouncedSearchTerm = this.searchTerm;
-            this.pageNumber = 1; // Reset to first page only when searching
-        }, 300);
-    }
-
-    // Modal Events
-    handleFlowLaunch() {
-        if (!this.hasFlowName) {
-            this.showToast('Error', 'No flow specified', 'error');
+        const fieldName = event.detail.fieldName;
+        const col = this.columnInfo.find((c) => c.key === fieldName || `${c.key}__url` === fieldName);
+        if (!col) {
             return;
         }
-        
-        // Set up flow input variables with current context
-        this.flowInputVariables = [
-            {
-                name: 'recordId',
-                type: 'String',
-                value: this.recordId
-            }
-            // Add any other variables your flow needs
-        ];
-        
-        this.flowKey = Date.now();
-        this.showFlowModal = true;
+        this.applySort(col.key, event.detail.sortDirection);
     }
 
-    handleFlowStatusChange(event) {
-        if (event.detail.status === 'FINISHED') {
-            // Wait a brief moment before closing to ensure flow completes
-            setTimeout(() => {
-                this.handleCloseModal();
-                this.handleRefresh();
-                this.showToast('Success', 'Flow completed successfully', 'success');
-            }, 100);
-        } else if (event.detail.status === 'ERROR') {
-            this.showToast('Error', event.detail.message || 'An error occurred while running the flow', 'error');
-            this.handleCloseModal();
+    handleSmallSortField(event) {
+        this.applySort(event.detail.value, this.sortDirection || 'asc');
+    }
+
+    handleSmallSortDirection(event) {
+        if (this.sortKey) {
+            this.applySort(this.sortKey, event.detail.value);
         }
     }
 
-    handleCloseModal() {
-        // Force cleanup of the current flow instance
-        const flowComponent = this.template.querySelector('lightning-flow');
-        if (flowComponent) {
-            try {
-                flowComponent.pause();
-                flowComponent.stop();
-            } catch (error) {
-                console.error('Error stopping flow:', error);
-            }
-        }
-        
-        // Reset all modal-related states
-        this.showFlowModal = false;
-        this.flowKey = null;
-        this.flowInputVariables = [];
-        
-        // Force component refresh
-        this.handleRefresh();
+    applySort(key, direction) {
+        this.sortKey = key;
+        this.sortDirection = direction === 'desc' ? 'desc' : 'asc';
+        this.userSorted = true;
+        this.persistState();
+        this.resetAndLoad();
     }
 
-    handleCloseEditModal() {
-        const modal = this.template.querySelector('section[data-id="editModal"]');
-        if (modal) {
-            modal.classList.add('slds-fade-in-close');
-            setTimeout(() => {
-                this.showEditModal = false;
-            }, 100);
-        }
-    }
-
-    handleCloseDeleteModal() {
-        this.showDeleteModal = false;
-        this.selectedRecordId = null;
-    }
-
-    handleBackdropClick(event) {
-        if (event.target === event.currentTarget) {
-            this.handleCloseModal();
-        }
-    }
-
-    // Delete Events
-    handleConfirmDelete() {
-        this.isLoading = true;
-        deleteRecord({ 
-            recordId: this.selectedRecordId, 
-            objectName: this.childObjectApiName 
-        })
-            .then(() => {
-                this.showToast('Success', 'Record deleted successfully', 'success');
-                this.showDeleteModal = false;
-                this.selectedRecordId = null;
-                this.handleRefresh();
-            })
-            .catch(error => {
-                // Check if it's a permissions error
-                if (error.body && error.body.message && error.body.message.includes('Insufficient permissions')) {
-                    this.permissionError = true;
-                    this.permissionErrorMessage = error.body.message;
-                } else {
-                    this.showToast('Error', error.body?.message || 'Failed to delete record.', 'error');
-                }
-                this.showDeleteModal = false;
-            })
-            .finally(() => {
-                this.isLoading = false;
-            });
-    }
-
-    handleBulkDelete() {
-        this.showBulkDeleteModal = true;
-    }
-
-    async handleConfirmBulkDelete() {
-        try {
-            this.isLoading = true;
-            const recordIds = this.preSelectedRows;
-            
-            const deletePromises = recordIds.map(recordId => 
-                deleteRecord({ 
-                    recordId: recordId, 
-                    objectName: this.childObjectApiName 
-                })
-            );
-    
-            await Promise.all(deletePromises);
-            
-            this.showToast('Success', `${recordIds.length} records deleted successfully`, 'success');
-            
-            // Clear selections
-            this.preSelectedRows = [];
-            this.selectedRows = [];
-            this.showBulkDeleteButton = false;
-            this.showBulkDeleteModal = false;
-            
-            this.handleRefresh();
-        } catch (error) {
-            console.error('Error in bulk delete:', error);
-            this.showToast('Error', error.body?.message || 'Failed to delete records', 'error');
-        } finally {
-            this.isLoading = false;
-        }
-    }
-    
-    handleCloseBulkDeleteModal() {
-        this.showBulkDeleteModal = false;
-    }
-
-    // Form Events
-    handleRecordSubmit(event) {
-        event.preventDefault();
-        
-        try {
-            this.isLoading = true;
-            const fields = event.detail.fields;
-            this.template.querySelector('lightning-record-edit-form').submit(fields);
-        } catch (error) {
-            if (error.body && error.body.message && error.body.message.includes('Insufficient permissions')) {
-                this.permissionError = true;
-                this.permissionErrorMessage = error.body.message;
-            } else {
-                this.showToast('Error', 'An error occurred while submitting the form: ' + (error.message || error.body?.message || 'Unknown error'), 'error');
-            }
-        }
-    }
-    
-    handleRecordSuccess(event) {
-        try {
-            this.isLoading = false;
-            this.showEditModal = false;
-            this.selectedRecordId = null;
-            this.showToast('Success', 'Record updated successfully', 'success');
-            this.handleRefresh();
-        } catch (error) {
-            console.error('Success Handler Error:', error);
-            this.showToast('Error', 'An error occurred after record update: ' + (error.message || 'Unknown error'), 'error');
-        }
-    }
-
-    handleRecordError(event) {
-        this.isLoading = false;
-        console.error('Record Error:', event.detail);
-        
-        let errorMessage = 'An error occurred while saving the record.';
-        
-        // Try to extract a more specific error message
-        if (event.detail.message) {
-            errorMessage = event.detail.message;
-        } else if (event.detail.output && event.detail.output.fieldErrors) {
-            // Handle field-specific errors
-            const fieldErrors = event.detail.output.fieldErrors;
-            const firstFieldError = Object.values(fieldErrors)[0];
-            if (firstFieldError && firstFieldError[0]) {
-                errorMessage = firstFieldError[0].message;
-            }
-        } else if (event.detail.detail) {
-            errorMessage = event.detail.detail;
-        }
-        
-        this.showToast('Error', errorMessage, 'error');
-    }
-
-    // Other UI Events
-
-    handleSettingsClick(event) {
-        console.log('Settings clicked', {
-            currentState: this.showSettingsMenu,
-            event: event
-        });
-        event.stopPropagation();
-        this.showSettingsMenu = !this.showSettingsMenu;
-        console.log('New state:', this.showSettingsMenu);
-    }
-
-    handleResetColumnWidths(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-
-    // Reset column widths storage
-    this.columnWidths = {};
-
-    // Calculate column width based on count
-    const columnCount = this.fieldsArray.length;
-    const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
-    let columnWidth;
-
-    // For 5 or fewer columns, calculate based on container width
-    // For more than 5 columns, use fixed width
-    if (columnCount <= 5) {
-        const container = this.template.querySelector('.table-container');
-        const availableWidth = container ? container.offsetWidth : 1200;
-        columnWidth = Math.floor((availableWidth - totalFixedWidth) / columnCount);
-    } else {
-        columnWidth = 255; // Fixed width for many columns
-    }
-
-    // Reset columns with calculated width
-    this.columns = this.columns.map(column => {
-        if (column.fieldName === 'rowNumber') {
-            return { ...column, initialWidth: FIXED_WIDTH.number };
-        } else if (column.type === 'action') {
-            return { ...column, initialWidth: FIXED_WIDTH.action };
-        } else {
-            return { ...column, initialWidth: columnWidth };
-        }
-    });
-
-    // Get datatable component and force refresh
-    const datatable = this.template.querySelector('lightning-datatable');
-    if (datatable) {
-        datatable.columns = [...this.columns];
-    }
-
-    // Close settings menu and update table responsiveness
-    this.showSettingsMenu = false;
-    this.updateTableResponsiveness();
-
-    // Show success toast
-    this.showToast('Success', 'Column widths have been reset', 'success');
-    }
-
-    handleNewRecord() {
-    const defaultValues = encodeDefaultFieldValues({
-    [this.parentLookupField]: this.recordId
-    });
-
-    this[NavigationMixin.Navigate]({
-    type: 'standard__objectPage',
-    attributes: {
-        objectApiName: this.childObjectApiName,
-        actionName: 'new'
-    },
-    state: {
-        defaultFieldValues: defaultValues
-    }
-    });
-    }
-
-    handleRefresh() {
-    this.isLoading = true;
-
-    // Store current selections
-    const currentSelections = [...this.preSelectedRows];
-
-    refreshApex(this.wiredRecordResult)
-        .then(() => {
-            // Restore selections
-            if (currentSelections.length > 0) {
-                this.preSelectedRows = currentSelections;
-                this.showBulkDeleteButton = true;
-            }
-        })
-        .catch(error => {
-            console.error('Error refreshing data:', error);
-            this.showToast('Error', 'Failed to refresh data', 'error');
-        })
-        .finally(() => {
-            this.isLoading = false;
-        });
-    }
-
-    //Data Processing Methods
-    // Replace your existing initializeColumns method with this updated version
-    initializeColumns() {
-        const columnCount = this.fieldsArray.length;
-        
-        // Calculate available width for data columns
-        const totalFixedWidth = FIXED_WIDTH.number + FIXED_WIDTH.action;
-        let columnWidth;
-
-        // Get container width
-        const container = this.template.querySelector('.table-container');
-        const availableWidth = container ? container.offsetWidth : 1;
-
-        if (columnCount <= 4) {
-            // For 5 or fewer columns, calculate width to fit container
-            columnWidth = Math.floor((availableWidth - totalFixedWidth) / columnCount);
-        } else {
-            // For more than 5 columns, use fixed width
-            columnWidth = 255; // Fixed width to ensure scrolling
-        }
-
-        // Initialize the columns array
-        this.columns = [
-            // Row Number Column
-            {
-                label: '#',
-                type: 'text',
-                fieldName: 'rowNumber',
-                sortable: false,
-                fixedWidth: FIXED_WIDTH.number,
-                initialWidth: FIXED_WIDTH.number,
-                cellAttributes: { 
-                    class: 'slds-text-align_right slds-p-right_small'
-                },
-                typeAttributes: {
-                    label: { fieldName: 'rowNumber' }
-                }
-            },
-            
-            // Data Columns
-            ...this.fieldsArray.map((field, index) => {
-                const isNameField = field.toLowerCase() === 'name';
-                const isLookupField = field.includes('.');
-                const isEmailField = field.toLowerCase().includes('email');
-                const isPhoneField = field.toLowerCase().includes('phone');
-                const fieldType = this.objectInfo?.fields[field]?.dataType?.toLowerCase();
-                const fieldInfo = this.objectInfo?.fields[field];
-                const isAddressField = fieldType === 'address' || this.isCompoundAddressField(field);
-
-                let fieldConfig = {
-                    label: this.getColumnLabel(field, index),
-                    fieldName: field,
-                    sortable: this.sortableFieldsArray.includes(field),
-                    wrapText: true,
-                    initialWidth: this.columnWidths[field] || columnWidth
-                };
-
-                // Handle different field types
-                if (isNameField) {
-                    fieldConfig.type = 'url';
-                    fieldConfig.fieldName = 'nameUrl';
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: 'Name' },
-                        target: '_self'
-                    };
-                } 
-                else if (isLookupField) {
-                    fieldConfig.type = 'url';
-                    fieldConfig.fieldName = `${field}_url`;
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: field },
-                        target: '_self'
-                    };
-                }
-                else if (isEmailField) {
-                    fieldConfig.type = 'button';
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: field },
-                        name: field,
-                        iconName: { fieldName: `${field}_hasIcon` },
-                        iconPosition: 'left',
-                        variant: 'base',
-                        disabled: false,
-                        title: { fieldName: field }
-                    };
-                }
-                else if (isPhoneField) {
-                    fieldConfig.type = 'button';
-                    fieldConfig.typeAttributes = {
-                        label: { fieldName: field },
-                        name: field,
-                        iconName: { fieldName: `${field}_hasIcon` },
-                        iconPosition: 'left',
-                        variant: 'base',
-                        disabled: { fieldName: `${field}_disabled` },
-                        title: { fieldName: field }
-                    };
-                }
-                else if (fieldType === 'currency') {
-                    fieldConfig = {
-                        ...fieldConfig,
-                        type: 'currency',
-                        typeAttributes: {
-                            currencyCode: { fieldName: 'CurrencyIsoCode' },
-                            currencyDisplayAs: 'symbol',
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        },
-                        cellAttributes: { 
-                            alignment: 'right'
-                        }
-                    };
-                }
-                else if (fieldType === 'percent') {
-                    fieldConfig.type = 'percent';
-                    fieldConfig.typeAttributes = {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                        step: '0.01'
-                    };
-                }
-                else if (fieldType === 'double' || fieldType === 'integer') {
-                    fieldConfig.type = 'number';
-                    fieldConfig.typeAttributes = {
-                        minimumFractionDigits: fieldType === 'integer' ? 0 : 2,
-                        maximumFractionDigits: fieldType === 'integer' ? 0 : 2
-                    };
-                }
-                else if (fieldType === 'date') {
-                    fieldConfig.type = 'date';
-                    fieldConfig.typeAttributes = {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
-                    };
-                }
-                else if (fieldType === 'datetime') {
-                    fieldConfig.type = 'date';
-                    fieldConfig.typeAttributes = {
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    };
-                }
-                else if (fieldType === 'boolean') {
-                    fieldConfig.type = 'boolean';
-                }
-                else if (fieldType === 'rich_textarea') {
-                    fieldConfig.type = 'richText';
-                }
-                else if (isAddressField) {
-                    fieldConfig = {
-                        ...fieldConfig,
-                        type: 'text',
-                        fieldName: `${field}_formatted`,
-                        typeAttributes: {
-                            class: 'address-field'
-                        },
-                        cellAttributes: {
-                            class: 'slds-cell-wrap',
-                            alignment: 'left'
-                        }
-                    };
-                }
-
-                return fieldConfig;
-            }),
-            
-            // Action Column
-            {
-                type: 'action',
-                typeAttributes: { rowActions: this.getActions() },
-                fixedWidth: FIXED_WIDTH.action,
-                initialWidth: FIXED_WIDTH.action
-            }
-        ];
-
-        // Update CSS classes for table container
-        const tableContainer = this.template.querySelector('.table-container');
-        if (tableContainer) {
-            if (columnCount <= 5) {
-                tableContainer.classList.add('light-columns');
-                tableContainer.classList.remove('heavy-columns');
-            } else {
-                tableContainer.classList.remove('light-columns');
-                tableContainer.classList.add('heavy-columns');
-            }
-        }
-    }  
-   
-    processRecords(data) {
-        
-        if (!data || !data.records) {
-            
-            this.data = [];
-            return;
-        }
-    
-        // Dynamically get currency fields from fieldsArray that are marked as currency in objectInfo
-        const currencyFields = this.fieldsArray.filter(field => 
-            this.objectInfo?.fields[field]?.dataType?.toLowerCase() === 'currency'
-        );
-    
-        const startingNumber = (this.pageNumber - 1) * this.recordsPerPage + 1;
-        
-        this.data = data.records.map((record, index) => {
-            const flatRecord = { ...record };
-            flatRecord.rowNumber = startingNumber + index;
-
-        // Process address fields first
-        this.fieldsArray.forEach(field => {
-            if (this.isCompoundAddressField(field)) {
-                flatRecord[`${field}_formatted`] = this.formatAddressField(flatRecord, field);
-            }
-        });
-            
-            // Process currency fields that are in our fieldsToDisplay
-            currencyFields.forEach(fieldName => {
-                console.log(`Processing currency field ${fieldName}:`, {
-                    value: flatRecord[fieldName],
-                    type: typeof flatRecord[fieldName],
-                    hasValue: fieldName in flatRecord
-                });
-    
-                if (fieldName in flatRecord) {
-                    const numValue = parseFloat(flatRecord[fieldName]);
-                    if (!isNaN(numValue)) {
-                        flatRecord[fieldName] = numValue;
-                    }
-                    // Set CurrencyIsoCode if not present
-                    if (!flatRecord.CurrencyIsoCode) {
-                        flatRecord.CurrencyIsoCode = this.userCurrency || 'USD';
-                    }
-                }
-            });
-    
-            // Handle Name field
-            if (flatRecord.Name) {
-                flatRecord.nameUrl = `/${flatRecord.Id}`;
-            }
-    
-            // Process other fields
-            this.fieldsArray.forEach(field => {
-                if (field.includes('.')) {
-                    // Handle relationship fields
-                    const [relationshipField, relatedField] = field.split('.');
-                    if (flatRecord[relationshipField]) {
-                        flatRecord[`${field}`] = flatRecord[relationshipField][relatedField];
-                        flatRecord[`${field}_url`] = `/${flatRecord[relationshipField].Id}`;
-                        flatRecord[`${field}_label`] = flatRecord[relationshipField][relatedField];
-                    }
-                } else {
-                    // Handle email fields
-                    if (field.toLowerCase().includes('email')) {
-                        flatRecord[`${field}_hasIcon`] = flatRecord[field] ? 'utility:email' : undefined;
-                        if (flatRecord[field]) {
-                            flatRecord[`${field}_url`] = `mailto:${flatRecord[field]}`;
-                        }
-                    }
-                    
-                    // Handle phone fields
-                    if (field.toLowerCase().includes('phone') || field.toLowerCase().includes('mobile')) {
-                        flatRecord[`${field}_hasIcon`] = flatRecord[field] ? 'utility:phone_portrait' : undefined;
-                        flatRecord[`${field}_disabled`] = !flatRecord[field];
-                        if (flatRecord[field]) {
-                            const cleanNumber = flatRecord[field].replace(/\D/g, '');
-                            flatRecord[`${field}_formatted`] = this.formatPhoneNumber(flatRecord[field]);
-                            flatRecord[`${field}_value`] = cleanNumber;
-                        }
-                    }
-                }
-            });
-    
-            return flatRecord;
-        });
-    
-        // Debug the processed data
-        const processedCurrencyFields = this.data.map(record => ({
-            id: record.Id,
-            name: record.Name,
-            currencyFields: currencyFields.reduce((acc, field) => {
-                acc[field] = record[field];
-                return acc;
-            }, {})
-        }));
-        
-    
-        this.filteredData = [...this.data];
-    
-        // Maintain selections after refresh
-        if (this.preSelectedRows.length > 0) {
-            const selectedIds = new Set(this.preSelectedRows);
-            this.selectedRows = this.filteredData.filter(row => selectedIds.has(row.Id));
-        }
-        this.totalPages = Math.ceil(data.totalRecords / this.recordsPerPage);
-        
-    }
-
-    getSortValue(record, field) {
-        const column = this.columns.find(col => col.fieldName === field);
-        // Use sortFieldName if specified, otherwise use fieldName
-        const sortField = column?.sortFieldName || field;
-        
-        // For lookup fields that use _url suffix
-        if (sortField.endsWith('_url')) {
-            const baseField = sortField.replace('_url', '');
-            return record[baseField] || '';
-        }
-        
-        return record[sortField] || '';
-    }
-
-    formatPhoneNumber(phoneNumber) {
-        const cleaned = phoneNumber.replace(/\D/g, '');
-        if (cleaned.length === 10) {
-            return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
-        }
-        return phoneNumber;
-    }
-    
-    formatLabel(fieldName) {
-        return fieldName
-            .split(/(?=[A-Z])|_/)
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ')
-            .replace(/\s+[cC]$/, '')
-            .replace(/__c$/i, '');
-    }
-
-    getColumnLabel(fieldApi, index) {
-        if (this.columnLabelsArray[index]) {
-            return this.columnLabelsArray[index];
-        }
-        if (this.objectInfo) {
-            const fieldInfo = this.objectInfo.fields[fieldApi];
-            if (fieldInfo) {
-                return fieldInfo.label;
-            }
-        }
-        return this.formatLabel(fieldApi);
-    }
-
-    //Navigation Methods
-    navigateToRecord() {
-        this[NavigationMixin.Navigate]({
-            type: 'standard__recordPage',
-            attributes: {
-                recordId: this.selectedRecordId,
-                objectApiName: this.childObjectApiName,
-                actionName: 'view'
-            }
-        });
-    }
+    // ===== HANDLERS: PAGINATION / SELECTION =====
 
     handlePrevious() {
-        if (this.pageNumber > 1) {
-            this.pageNumber--;
-            this.refresh();
+        if (this.pageIndex > 0) {
+            this.pageIndex -= 1;
+            this.clearSelection();
+            this.load();
         }
     }
 
     handleNext() {
-        if (this.pageNumber < this.totalPages) {
-            this.pageNumber++;
-            this.refresh();
+        if (this.hasMore && this.cursors[this.pageIndex + 1]) {
+            this.pageIndex += 1;
+            this.clearSelection();
+            this.load();
         }
-    }  
+    }
 
-    //Utility Methods
-    showToast(title, message, variant) {
-        const event = new ShowToastEvent({
-            title: title,
-            message: message,
-            variant: variant
+    handleRowSelection(event) {
+        this.selectedIds = (event.detail.selectedRows || []).map((row) => row.id);
+    }
+
+    clearSelection() {
+        this.selectedIds = [];
+    }
+
+    handleColumnResize(event) {
+        const widths = { ...this.columnWidths };
+        const columns = event.detail.columnWidths || [];
+        this.datatableColumns.forEach((col, index) => {
+            if (col.type !== 'action' && columns[index]) {
+                const key = col.fieldName.replace(/__url$/, '');
+                widths[key] = columns[index];
+            }
         });
-        this.dispatchEvent(event);
+        this.columnWidths = widths;
     }
 
-    debounce(fn, delay) {
-        let timeoutId;
-        return (...args) => {
-            if (timeoutId) {
-                clearTimeout(timeoutId);
+    handleSettingsSelect(event) {
+        if (event.detail.value === 'resetWidths') {
+            this.columnWidths = {};
+            this.announce('Column widths reset.');
+        }
+    }
+
+    // ===== HANDLERS: ACTIONS =====
+
+    handleRefresh() {
+        this.rowErrors = [];
+        this.refresh();
+    }
+
+    handleRetry() {
+        this.resetAndLoad();
+    }
+
+    handleNew() {
+        const ctx = this.context;
+        this[NavigationMixin.Navigate]({
+            type: 'standard__objectPage',
+            attributes: { objectApiName: ctx.objectApiName, actionName: 'new' },
+            state: {
+                defaultFieldValues: encodeDefaultFieldValues({ [ctx.lookupField]: this._recordId }),
+                navigationLocation: 'RELATED_LIST'
             }
-            timeoutId = setTimeout(() => {
-                fn(...args);
-            }, delay);
-        };
+        });
     }
 
-    updateTableResponsiveness() {
-        setTimeout(() => {
-            const tableContainer = this.template.querySelector('.table-container');
-            if (tableContainer) {
-                if (this.fieldsArray.length <= 5) {
-                    tableContainer.classList.add('light-columns');
-                    tableContainer.classList.remove('heavy-columns');
-                } else {
-                    tableContainer.classList.remove('light-columns');
-                    tableContainer.classList.add('heavy-columns');
-                }
-            }
-        }, 0);
+    handleRowAction(event) {
+        this.runRowAction(event.detail.action.name, event.detail.row.id);
     }
 
-    //Public API Methods
-    @api
-    refresh() {
-        return refreshApex(this.wiredRecordResult);
+    handleCardAction(event) {
+        this.runRowAction(event.detail.value, event.currentTarget.dataset.id);
     }
 
-    //Error Handling Methods
-    handleError(error) {
-        this.error = error;
-        this.data = [];
-        this.filteredData = [];
-        this.selectedRows = []; // Clear selections on error
-        this.showBulkDeleteButton = false;
-        
-        if (error) {
-            let errorMessage = 'Unknown error';
-            if (Array.isArray(error.body)) {
-                errorMessage = error.body.map(e => e.message).join(', ');
-            } else if (error.body && typeof error.body.message === 'string') {
-                errorMessage = error.body.message;
-            }
-            
-            this.showToast('Error', errorMessage, 'error');
-            console.error('Error in wired records:', {
-                error: error,
-                message: errorMessage
+    handleCardOpen(event) {
+        event.preventDefault();
+        this.runRowAction('view', event.currentTarget.dataset.id);
+    }
+
+    runRowAction(action, recordId) {
+        if (action === 'view') {
+            this[NavigationMixin.Navigate]({
+                type: 'standard__recordPage',
+                attributes: { recordId, objectApiName: this.context.objectApiName, actionName: 'view' }
             });
+        } else if (action === 'edit') {
+            this.editRecord(recordId);
+        } else if (action === 'delete') {
+            this.deleteOne(recordId);
+        } else if (action && action.startsWith('action:')) {
+            this.launchAction(action.slice('action:'.length), recordId);
         }
-        
-        this.isLoading = false;
     }
 
-    handleDismissPermissionError() {
-        this.permissionError = false;
-        this.permissionErrorMessage = '';
-    }
-
-    isCompoundAddressField(fieldName) {
-        if (!fieldName) return false;
-        return fieldName.toLowerCase().endsWith('address') &&
-               (fieldName.toLowerCase().includes('mailing') ||
-                fieldName.toLowerCase().includes('shipping') ||
-                fieldName.toLowerCase().includes('billing') ||
-                fieldName.toLowerCase().includes('other'));
-    }
-    
-    formatAddressField(record, baseFieldName) {
-        // For standard address fields, we need to use the individual components
-        const prefix = baseFieldName.replace('Address', '');
-        const street = record[prefix + 'Street'];
-        const city = record[prefix + 'City'];
-        const state = record[prefix + 'State'];
-        const postalCode = record[prefix + 'PostalCode'];
-        const country = record[prefix + 'Country'];
-        
-        const parts = [];
-        if (street) parts.push(street);
-        if (city) {
-            let cityRegion = city;
-            if (state) cityRegion += `, ${state}`;
-            if (postalCode) cityRegion += ` ${postalCode}`;
-            parts.push(cityRegion);
+    async editRecord(recordId) {
+        const result = await EditModal.open({
+            size: 'medium',
+            label: `Edit ${this.context.objectLabel}`,
+            heading: `Edit ${this.context.objectLabel}`,
+            recordId,
+            objectApiName: this.context.objectApiName,
+            fields: this.context.editFields
+        });
+        if (result === 'saved') {
+            this.toast('Saved', `The ${this.context.objectLabel.toLowerCase()} was saved.`, 'success');
+            await this.load();
+            this.restoreFocus();
         }
-        if (country) parts.push(country);
-        
-        return parts.join('\n');
     }
 
+    async deleteOne(recordId) {
+        const label = this.context.objectLabel;
+        const confirmed = await LightningConfirm.open({
+            label: `Delete ${label}`,
+            message: `Delete this ${label.toLowerCase()}? You can't undo this.`,
+            theme: 'error',
+            variant: 'header'
+        });
+        if (!confirmed) {
+            return;
+        }
+        try {
+            await deleteRecord(recordId);
+            this.toast('Deleted', `The ${label.toLowerCase()} was deleted.`, 'success');
+            this.selectedIds = this.selectedIds.filter((id) => id !== recordId);
+            await this.reloadAfterDelete();
+        } catch (error) {
+            this.toast(`Couldn't delete the ${label.toLowerCase()}`, reduceError(error), 'error');
+        }
+        this.restoreFocus();
+    }
+
+    async handleBulkDelete() {
+        const ids = [...this.selectedIds];
+        if (!ids.length) {
+            return;
+        }
+        const plural = this.objectLabelPlural.toLowerCase();
+        const confirmed = await LightningConfirm.open({
+            label: 'Delete selected records',
+            message: `Delete ${ids.length} selected ${ids.length === 1 ? this.context.objectLabel.toLowerCase() : plural} on this page? You can't undo this. Records not shown on this page aren't affected.`,
+            theme: 'error',
+            variant: 'header'
+        });
+        if (!confirmed) {
+            return;
+        }
+        this.isLoading = true;
+        let response;
+        try {
+            response = await deleteRows({ request: { definitionKey: this.context.definitionKey, parentId: this._recordId, recordIds: ids } });
+        } catch (error) {
+            this.isLoading = false;
+            this.toast('Delete failed', reduceError(error), 'error');
+            this.restoreFocus();
+            return;
+        }
+        if (!response || response.status !== STATUS_OK) {
+            this.isLoading = false;
+            this.toast('Delete failed', (response && response.message) || 'Something went wrong. Try again.', 'error');
+            this.restoreFocus();
+            return;
+        }
+        const names = new Map(this.rows.map((r) => [r.id, this.rowName(r)]));
+        const failures = (response.results || []).filter((r) => !r.success);
+        this.rowErrors = failures.map((f) => ({ id: f.recordId, text: `${names.get(f.recordId) || f.recordId}: ${f.message}` }));
+        this.selectedIds = failures.map((f) => f.recordId).filter((id) => names.has(id));
+        if (response.failedCount === 0) {
+            this.toast('Deleted', `${response.deletedCount} ${response.deletedCount === 1 ? 'record was' : 'records were'} deleted.`, 'success');
+        } else if (response.deletedCount === 0) {
+            this.toast('Nothing was deleted', `${response.failedCount} ${response.failedCount === 1 ? 'record' : 'records'} couldn't be deleted. See the list for details.`, 'error');
+        } else {
+            this.toast(
+                'Some records were not deleted',
+                `${response.deletedCount} deleted, ${response.failedCount} couldn't be deleted. See the list for details.`,
+                'warning'
+            );
+        }
+        await this.reloadAfterDelete();
+        this.restoreFocus();
+    }
+
+    async reloadAfterDelete() {
+        await this.load();
+        if (this.isOk && this.rows.length === 0 && this.pageIndex > 0) {
+            this.pageIndex -= 1;
+            await this.load();
+        }
+    }
+
+    handleDismissRowErrors() {
+        this.rowErrors = [];
+    }
+
+    handleHeaderAction(event) {
+        this.launchAction(event.currentTarget.dataset.key, this._recordId);
+    }
+
+    handleHeaderMenuAction(event) {
+        this.launchAction(event.detail.value, this._recordId);
+    }
+
+    /**
+     * Runs a configured action. Header actions run for the record page's record, row actions for
+     * that row's record; the record ID is passed to flows as the text input variable recordId.
+     */
+    async launchAction(key, recordId) {
+        const action = this.configuredActions.find((a) => a.key === key);
+        if (!action) {
+            return;
+        }
+        if (action.type === 'standard') {
+            this.handleNew();
+            return;
+        }
+        const label = this.actionLabel(action);
+        if (action.type === 'quickAction') {
+            // The quick action opens in Salesforce's own dialog; the page refresh it triggers
+            // reaches this list through the registered refresh handler.
+            this[NavigationMixin.Navigate]({
+                type: 'standard__quickAction',
+                attributes: { apiName: action.target },
+                state: { recordId }
+            });
+            return;
+        }
+        const result = await FlowModal.open({
+            size: 'medium',
+            label,
+            heading: label,
+            flowApiName: action.target,
+            inputVariables: [{ name: 'recordId', type: 'String', value: recordId }]
+        });
+        if (result === 'finished') {
+            this.toast('Done', `${label} finished.`, 'success');
+            await this.refresh();
+        } else if (result === 'error') {
+            this.toast('The flow stopped', 'The flow ran into a problem. Contact your Salesforce administrator.', 'error');
+        }
+        this.restoreFocus();
+    }
+
+    // ===== HELPERS =====
+
+    rowName(row) {
+        const nameCol = this.columnInfo.find((c) => c.type === 'name' && c.visible) || this.columnInfo.find((c) => c.visible);
+        return nameCol && row[nameCol.key] !== undefined ? String(row[nameCol.key]) : undefined;
+    }
+
+    toast(title, message, variant) {
+        this.dispatchEvent(new ShowToastEvent({ title, message, variant }));
+    }
+
+    announce(text) {
+        this.announcement = text || '';
+    }
+
+    focusFilterButton() {
+        Promise.resolve().then(() => {
+            const button = this.template.querySelector('[data-id="filter-toggle"]');
+            if (button) {
+                button.focus();
+            }
+        });
+    }
+
+    /** After a dialog closes and the list re-renders, keep focus inside the component. */
+    restoreFocus() {
+        Promise.resolve().then(() => {
+            const heading = this.template.querySelector('[data-id="heading"]');
+            if (heading && !this.template.activeElement) {
+                heading.focus();
+            }
+        });
+    }
 }

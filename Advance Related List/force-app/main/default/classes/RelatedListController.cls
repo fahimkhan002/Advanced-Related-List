@@ -1,468 +1,311 @@
 /**
- * @description Controller class for the Advanced Related List LWC component with security checks
- * @author Fahim Khan
- * @date 2025-01-15
+ * @description Aura/LWC boundary for the Tekenable Advance Related List.
+ *
+ *              Exposed endpoints (the only ones):
+ *                - getRows    : scoped, paginated read of one related list
+ *                - deleteRows : bounded, scoped bulk delete (list definitions only)
+ *
+ *              Retired in v2 (removed, see docs/designs/ADR-001): getRecords, deleteRecord,
+ *              updateRecords, getUserPermissions.
+ *
+ *              Responses are declared DTOs; no SObject is returned to the client. Errors are
+ *              returned as a status + safe message rather than thrown, so the UI can render
+ *              configuration, access and input states distinctly.
  */
 public with sharing class RelatedListController {
-    
-    // ===== INNER CLASSES =====
-    
-    /**
-     * @description Wrapper class to hold the response data for the related list
-     */
-    public class RelatedListWrapper {
-        @AuraEnabled public List<SObject> records;
-        @AuraEnabled public Integer totalRecords;
-        
-        public RelatedListWrapper(List<SObject> records, Integer totalRecords) {
-            this.records = records;
-            this.totalRecords = totalRecords;
+    public static final String STATUS_OK = 'OK';
+    public static final String STATUS_CONFIG = 'CONFIG_ERROR';
+    public static final String STATUS_ACCESS = 'ACCESS_ERROR';
+    public static final String STATUS_INPUT = 'INPUT_ERROR';
+    public static final String STATUS_STALE = 'STALE_CURSOR';
+    public static final String STATUS_ERROR = 'ERROR';
+
+    @TestVisible
+    private static final String GENERIC_ERROR = 'We couldn\'t complete the request. Try again, or ask your Salesforce administrator to check the list configuration.';
+
+    // ===== REQUEST DTOs =====
+
+    /** @description Browser-supplied legacy App Builder configuration. Untrusted input. */
+    public class LegacyConfig {
+        @AuraEnabled
+        public String childObjectApiName { get; set; }
+        @AuraEnabled
+        public String parentLookupField { get; set; }
+        @AuraEnabled
+        public String fieldsToDisplay { get; set; }
+        @AuraEnabled
+        public String searchableFields { get; set; }
+        @AuraEnabled
+        public String sortableFields { get; set; }
+        @AuraEnabled
+        public String columnLabels { get; set; }
+        @AuraEnabled
+        public String flowName { get; set; }
+    }
+
+    /** @description One filter condition. `columnKey` refers to a column returned by the server. */
+    public class FilterInput {
+        @AuraEnabled
+        public String columnKey { get; set; }
+        @AuraEnabled
+        public String operator { get; set; }
+        @AuraEnabled
+        public String value { get; set; }
+    }
+
+    /** @description Read request. */
+    public class ListRequest {
+        @AuraEnabled
+        public String definitionKey { get; set; }
+        @AuraEnabled
+        public String parentId { get; set; }
+        @AuraEnabled
+        public LegacyConfig legacy { get; set; }
+        @AuraEnabled
+        public String searchTerm { get; set; }
+        @AuraEnabled
+        public List<FilterInput> filters { get; set; }
+        @AuraEnabled
+        public String filterLogic { get; set; }
+        @AuraEnabled
+        public String sortKey { get; set; }
+        @AuraEnabled
+        public String sortDirection { get; set; }
+        @AuraEnabled
+        public Integer pageSize { get; set; }
+        @AuraEnabled
+        public String cursor { get; set; }
+    }
+
+    /** @description Bulk delete request. */
+    public class DeleteRequest {
+        @AuraEnabled
+        public String definitionKey { get; set; }
+        @AuraEnabled
+        public String parentId { get; set; }
+        @AuraEnabled
+        public List<String> recordIds { get; set; }
+    }
+
+    // ===== RESPONSE DTOs =====
+
+    /** @description Column metadata the UI may render. Only usable columns are returned. */
+    public class ColumnInfo {
+        @AuraEnabled
+        public String key;
+        @AuraEnabled
+        public String fieldPath;
+        @AuraEnabled
+        public String label;
+        /** text, name, link, email, phone, url, number, currency, percent, date, datetime, boolean, picklist, address, textarea */
+        @AuraEnabled
+        public String type;
+        @AuraEnabled
+        public Integer scale;
+        @AuraEnabled
+        public Boolean visible;
+        @AuraEnabled
+        public Boolean sortable;
+        @AuraEnabled
+        public Boolean filterable;
+        @AuraEnabled
+        public Boolean searchable;
+        /** Filter value control: text, number, date, boolean, picklist */
+        @AuraEnabled
+        public String filterType;
+        @AuraEnabled
+        public List<String> operators;
+        @AuraEnabled
+        public List<Option> options;
+    }
+
+    /** @description Label/value pair. */
+    public class Option {
+        @AuraEnabled
+        public String label;
+        @AuraEnabled
+        public String value;
+        public Option(String label, String value) {
+            this.label = label;
+            this.value = value;
         }
     }
 
     /**
-     * @description Custom exception for security violations
+     * @description A launchable action. type: flow | quickAction. placement: list (header button,
+     *              runs for the parent record) | row (row menu, runs for that row's record).
+     *              For quick actions `target` is the navigation API name (for example Global.NewTask).
+     *              A null label means "use the list's Flow Modal Title" (legacy flow only).
      */
-    public class SecurityException extends Exception {}
-    
-    // ===== SECURITY UTILITY METHODS =====
-    
-    /**
-     * @description Checks object-level CRUD permissions
-     * @param objectType The SObject type to check
-     * @param operation The CRUD operation to check (CREATE, READ, UPDATE, DELETE)
-     * @throws SecurityException if the user lacks required permissions
-     */
-    private static void checkObjectCRUD(String objectType, String operation) {
-        try {
-            // First verify the object type exists
-            Schema.SObjectType sObjectType = Schema.getGlobalDescribe().get(objectType);
-            if (sObjectType == null) {
-                throw new SecurityException('Invalid object type: ' + objectType);
-            }
-            
-            Schema.DescribeSObjectResult describe = sObjectType.getDescribe();
-            Boolean hasPermission = false;
-            String errorMsg = '';
-            
-            switch on operation.toUpperCase() {
-                when 'CREATE' {
-                    hasPermission = describe.isCreateable();
-                    errorMsg = 'create';
-                }
-                when 'READ' {
-                    hasPermission = describe.isAccessible();
-                    errorMsg = 'read';
-                }
-                when 'UPDATE' {
-                    hasPermission = describe.isUpdateable();
-                    errorMsg = 'update';
-                }
-                when 'DELETE' {
-                    hasPermission = describe.isDeletable();
-                    errorMsg = 'delete';
-                }
-            }
-            
-            if (!hasPermission) {
-                throw new SecurityException('Insufficient permissions to ' + errorMsg + ' ' + objectType + ' records');
-            }
-        } catch (Exception e) {
-            throw new SecurityException('Error checking permissions: ' + e.getMessage());
-        }
+    public class ActionInfo {
+        @AuraEnabled
+        public String key;
+        @AuraEnabled
+        public String type;
+        @AuraEnabled
+        public String target;
+        @AuraEnabled
+        public String label;
+        @AuraEnabled
+        public String placement;
+        /** Header actions: button | menu | null (automatic: first two are buttons). */
+        @AuraEnabled
+        public String display;
     }
-    
-    /**
-     * @description Checks field-level security for a list of fields
-     * @param objectType The API name of the object
-     * @param fields List of field API names
-     * @param operation The operation to check (READ or EDIT)
-     * @throws SecurityException if the user lacks required permissions
-     */
-    // Modify the checkFieldSecurity method to handle address fields
-    private static void checkFieldSecurity(String objectType, List<String> fields, String operation) {
-        Map<String, Schema.SObjectField> fieldMap = Schema.getGlobalDescribe()
-            .get(objectType).getDescribe().fields.getMap();
-        Set<String> processedFields = new Set<String>();
-        
-        for (String field : fields) {
-            // Handle address fields
-            if (field.toLowerCase().endsWith('address')) {
-                String baseField = field;
-                if (!processedFields.contains(baseField)) {
-                    processedFields.add(baseField);
-                    checkFieldAccess(fieldMap, baseField, operation);
-                }
-                continue;
-            }
-            
-            // Handle relationship fields
-            if (field.contains('.')) {
-                String baseField = field.split('\\.')[0];
-                if (!processedFields.contains(baseField)) {
-                    processedFields.add(baseField);
-                    checkFieldAccess(fieldMap, baseField, operation);
-                }
-                continue;
-            }
-            
-            if (!processedFields.contains(field)) {
-                processedFields.add(field);
-                checkFieldAccess(fieldMap, field, operation);
-            }
-        }
+
+    /** @description List-level context and capabilities for the running user. */
+    public class ListContext {
+        @AuraEnabled
+        public String mode;
+        @AuraEnabled
+        public String definitionKey;
+        @AuraEnabled
+        public String objectApiName;
+        @AuraEnabled
+        public String objectLabel;
+        @AuraEnabled
+        public String objectLabelPlural;
+        @AuraEnabled
+        public String parentObjectApiName;
+        @AuraEnabled
+        public String lookupField;
+        @AuraEnabled
+        public Boolean canCreate;
+        @AuraEnabled
+        public Boolean canEdit;
+        @AuraEnabled
+        public Boolean canDelete;
+        @AuraEnabled
+        public Boolean canBulkDelete;
+        /** Flow and quick action buttons/row items the running user can launch. */
+        @AuraEnabled
+        public List<ActionInfo> actions;
+        @AuraEnabled
+        public List<String> editFields;
+        @AuraEnabled
+        public String sortKey;
+        @AuraEnabled
+        public String sortDirection;
+        @AuraEnabled
+        public Integer omittedColumnCount;
+        @AuraEnabled
+        public Integer maxDeleteBatch;
     }
-        
-    /**
-     * @description Checks access for a single field
-     * @param fieldMap Map of field descriptors
-     * @param fieldName Field API name
-     * @param operation Operation to check
-     * @throws SecurityException if the user lacks required permissions
-     */
-    private static void checkFieldAccess(Map<String, Schema.SObjectField> fieldMap, String fieldName, String operation) {
-        Schema.SObjectField field = fieldMap.get(fieldName);
-        if (field == null) return; // Skip non-existent fields
-        
-        Schema.DescribeFieldResult describe = field.getDescribe();
-        Boolean hasPermission = operation.toUpperCase() == 'READ' ? 
-            describe.isAccessible() : describe.isUpdateable();
-            
-        if (!hasPermission) {
-            throw new SecurityException('Insufficient permissions to ' + operation.toLowerCase() + 
-                                     ' field: ' + fieldName);
+
+    /** @description Read response. `rows` contain only `id` and declared column keys. */
+    public class ListResponse {
+        @AuraEnabled
+        public String status = STATUS_OK;
+        @AuraEnabled
+        public String message;
+        @AuraEnabled
+        public ListContext context;
+        @AuraEnabled
+        public List<ColumnInfo> columns;
+        @AuraEnabled
+        public List<Map<String, Object>> rows;
+        /** Populated on the first page only; null when not computed. */
+        @AuraEnabled
+        public Integer totalCount;
+        @AuraEnabled
+        public Boolean totalCountCapped;
+        @AuraEnabled
+        public Boolean hasMore;
+        @AuraEnabled
+        public String nextCursor;
+    }
+
+    /** @description Per-row delete outcome. */
+    public class RowResult {
+        @AuraEnabled
+        public String recordId;
+        @AuraEnabled
+        public Boolean success;
+        @AuraEnabled
+        public String message;
+        public RowResult(String recordId, Boolean success, String message) {
+            this.recordId = recordId;
+            this.success = success;
+            this.message = message;
         }
     }
 
-    // ===== PUBLIC METHODS =====
-
-    /**
-     * @description Gets paginated records for the related list with search functionality
-     * @param childObject API name of the child object
-     * @param parentLookupField API name of the lookup field on child object
-     * @param parentId Id of the parent record
-     * @param fields List of fields to query
-     * @param pageSize Number of records per page
-     * @param pageNumber Current page number
-     * @param searchTerm Search string to filter records
-     * @param searchableFields List of fields to search in
-     * @return RelatedListWrapper Instance containing records and total count
-     */
-    @AuraEnabled(cacheable=true)
-    public static RelatedListWrapper getRecords(
-        String childObject,
-        String parentLookupField,
-        String parentId,
-        List<String> fields,
-        Integer pageSize,
-        Integer pageNumber,
-        String searchTerm,
-        List<String> searchableFields,
-        List<Map<String, String>> filters
-    ) {
-        try {
-            // Security checks
-            checkObjectCRUD(childObject, 'READ');
-            checkFieldSecurity(childObject, fields, 'READ');
-            
-            // Additional security check for searchable fields
-            if (!searchableFields.isEmpty()) {
-                checkFieldSecurity(childObject, searchableFields, 'READ');
-            }
-
-            // Validate inputs
-            validateInputs(childObject, parentLookupField, parentId, fields);
-
-            // Build query fields
-            Set<String> queryFields = buildQueryFields(fields);
-
-            // Build WHERE clause
-            String whereClause = buildWhereClause(
-                parentLookupField, 
-                parentId, 
-                searchTerm, 
-                searchableFields,
-                filters
-            );
-
-            // Get total record count
-            Integer totalRecords = getTotalRecords(childObject, whereClause);
-
-            // Build and execute main query
-            List<SObject> records = executeMainQuery(
-                childObject,
-                queryFields,
-                whereClause,
-                pageSize,
-                pageNumber
-            );
-
-            return new RelatedListWrapper(records, totalRecords);
-
-        } catch (SecurityException e) {
-            throw new AuraHandledException(e.getMessage());
-        } catch (Exception e) {
-            handleException(e);
-            return null;
-        }
+    /** @description Bulk delete response. Transaction semantics: per-row (partial success allowed). */
+    public class DeleteResponse {
+        @AuraEnabled
+        public String status = STATUS_OK;
+        @AuraEnabled
+        public String message;
+        @AuraEnabled
+        public Integer deletedCount = 0;
+        @AuraEnabled
+        public Integer failedCount = 0;
+        @AuraEnabled
+        public List<RowResult> results = new List<RowResult>();
     }
 
+    // ===== ENDPOINTS =====
+
     /**
-     * @description Deletes a specific record
-     * @param recordId Id of the record to delete
-     * @param objectName API name of the object
+     * @description Returns one page of a scoped related list. Not cacheable: results must reflect
+     *              edits, deletes and Flow runs immediately.
+     * @param request read request
+     * @return page of rows with column metadata and capabilities
      */
     @AuraEnabled
-    public static void deleteRecord(String recordId, String objectName) {
+    public static ListResponse getRows(ListRequest request) {
         try {
-            // Security check
-            checkObjectCRUD(objectName, 'DELETE');
-            
-            // Validate inputs
-            if (String.isBlank(recordId)) {
-                throw new AuraHandledException('Record ID cannot be blank.');
-            }
-
-            // Query the record first to ensure it exists and user has access
-            String query = 'SELECT Id FROM ' + String.escapeSingleQuotes(objectName) +
-                         ' WHERE Id = \'' + String.escapeSingleQuotes(recordId) + '\' LIMIT 1';
-            
-            List<SObject> records = Database.query(query);
-            if (!records.isEmpty()) {
-                delete records[0];
-            }
-        } catch (SecurityException e) {
-            throw new AuraHandledException(e.getMessage());
+            return RelatedListService.getRows(request);
+        } catch (RelatedListException e) {
+            ListResponse response = new ListResponse();
+            response.status = statusFor(e);
+            response.message = e.getMessage();
+            return response;
         } catch (Exception e) {
-            handleException(e);
+            ListResponse response = new ListResponse();
+            response.status = STATUS_ERROR;
+            response.message = GENERIC_ERROR;
+            return response;
         }
     }
 
     /**
-     * @description Updates a list of records
-     * @param records List of records to update
-     * @param objectName API name of the object
+     * @description Deletes selected rows of a definition-backed list in one bounded request.
+     * @param request delete request
+     * @return per-row results
      */
     @AuraEnabled
-    public static void updateRecords(List<SObject> records, String objectName) {
+    public static DeleteResponse deleteRows(DeleteRequest request) {
         try {
-            System.debug('Starting updateRecords method');
-            System.debug('Records to update: ' + records);
-            System.debug('Object name: ' + objectName);
-            
-            // Input validation
-            if (records == null || records.isEmpty()) {
-                throw new AuraHandledException('No records provided for update.');
-            }
-    
-            // Basic security check
-            Schema.SObjectType sObjectType = Schema.getGlobalDescribe().get(objectName);
-            if (sObjectType == null) {
-                throw new AuraHandledException('Invalid object type: ' + objectName);
-            }
-    
-            Schema.DescribeSObjectResult describeResult = sObjectType.getDescribe();
-            if (!describeResult.isUpdateable()) {
-                throw new AuraHandledException('Insufficient permissions to update ' + objectName);
-            }
-    
-            // Update records
-            Database.SaveResult[] results = Database.update(records, false);
-            
-            // Check results
-            List<String> errors = new List<String>();
-            for (Database.SaveResult result : results) {
-                if (!result.isSuccess()) {
-                    for (Database.Error err : result.getErrors()) {
-                        errors.add(err.getMessage());
-                    }
-                }
-            }
-            
-            if (!errors.isEmpty()) {
-                throw new AuraHandledException(String.join(errors, '. '));
-            }
-    
+            return RelatedListService.deleteRows(request);
+        } catch (RelatedListException e) {
+            DeleteResponse response = new DeleteResponse();
+            response.status = statusFor(e);
+            response.message = e.getMessage();
+            return response;
         } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'Error in updateRecords: ' + e.getMessage());
-            System.debug(LoggingLevel.ERROR, 'Stack trace: ' + e.getStackTraceString());
-            throw new AuraHandledException(e.getMessage());
+            DeleteResponse response = new DeleteResponse();
+            response.status = STATUS_ERROR;
+            response.message = GENERIC_ERROR;
+            return response;
         }
     }
 
-            @AuraEnabled(cacheable=true)
-        public static Map<String, Boolean> getUserPermissions(String objectName) {
-            try {
-                Schema.DescribeSObjectResult describe = Schema.getGlobalDescribe().get(objectName).getDescribe();
-                return new Map<String, Boolean>{
-                    'isCreateable' => describe.isCreateable(),
-                    'isUpdateable' => describe.isUpdateable(),
-                    'isDeletable' => describe.isDeletable()
-                };
-            } catch (Exception e) {
-                throw new AuraHandledException(e.getMessage());
+    @TestVisible
+    private static String statusFor(RelatedListException e) {
+        switch on e.category {
+            when CONFIG {
+                return STATUS_CONFIG;
+            }
+            when ACCESS {
+                return STATUS_ACCESS;
+            }
+            when STALE {
+                return STATUS_STALE;
+            }
+            when else {
+                return STATUS_INPUT;
             }
         }
-
-    // ===== PRIVATE HELPER METHODS =====
-
-    private static void validateInputs(
-        String childObject,
-        String parentLookupField,
-        String parentId,
-        List<String> fields
-    ) {
-        if (String.isBlank(childObject)) {
-            throw new AuraHandledException('Child object name cannot be blank.');
-        }
-        if (String.isBlank(parentLookupField)) {
-            throw new AuraHandledException('Parent lookup field cannot be blank.');
-        }
-        if (String.isBlank(parentId)) {
-            throw new AuraHandledException('Parent ID cannot be blank.');
-        }
-        if (fields == null || fields.isEmpty()) {
-            throw new AuraHandledException('Fields list cannot be empty.');
-        }
-    }
-
-    private static Set<String> buildQueryFields(List<String> fields) {
-        Set<String> queryFields = new Set<String>{'Id'};
-        
-        for(String field : fields) {
-            // Handle standard address fields
-            if(isStandardAddressField(field)) {
-                // For standard address fields, we need to query individual components
-                String prefix = field.replace('Address', '');
-                queryFields.add(prefix + 'Street');
-                queryFields.add(prefix + 'City');
-                queryFields.add(prefix + 'State');
-                queryFields.add(prefix + 'PostalCode');
-                queryFields.add(prefix + 'Country');
-            }
-            // Handle custom address fields
-            else if(field.toLowerCase().endsWith('__c') && 
-                    field.toLowerCase().contains('address')) {
-                queryFields.add(field + '.street');
-                queryFields.add(field + '.city');
-                queryFields.add(field + '.state');
-                queryFields.add(field + '.postalCode');
-                queryFields.add(field + '.country');
-                queryFields.add(field);
-            }
-            else {
-                queryFields.add(field);
-            }
-        }
-        return queryFields;
-    }
-
-    private static Boolean isStandardAddressField(String fieldName) {
-        return (fieldName == 'MailingAddress' || 
-                fieldName == 'ShippingAddress' || 
-                fieldName == 'BillingAddress' || 
-                fieldName == 'OtherAddress');
-    }
-
-    private static String buildWhereClause(
-        String parentLookupField,
-        String parentId,
-        String searchTerm,
-        List<String> searchableFields,
-        List<Map<String, String>> filters
-    ) {
-        String whereClause = String.escapeSingleQuotes(parentLookupField) + 
-                        ' = \'' + String.escapeSingleQuotes(parentId) + '\'';
-
-        // Add search conditions
-        if (String.isNotBlank(searchTerm) && searchableFields != null && !searchableFields.isEmpty()) {
-            List<String> searchConditions = new List<String>();
-            String searchValue = '%' + String.escapeSingleQuotes(searchTerm) + '%';
-            
-            for (String field : searchableFields) {
-                searchConditions.add(String.escapeSingleQuotes(field) + ' LIKE \'' + searchValue + '\'');
-            }
-            
-            if (!searchConditions.isEmpty()) {
-                whereClause += ' AND (' + String.join(searchConditions, ' OR ') + ')';
-            }
-        }
-
-        // Add filter conditions
-        if (filters != null && !filters.isEmpty()) {
-            List<String> filterConditions = new List<String>();
-            
-            for (Map<String, String> filter : filters) {
-                String field = String.escapeSingleQuotes(filter.get('field'));
-                String operator = filter.get('operator');
-                String value = String.escapeSingleQuotes(filter.get('value'));
-                
-                if (String.isNotBlank(field) && String.isNotBlank(value)) {
-                    String condition = '';
-                    switch on operator {
-                        when 'LIKE' {
-                            condition = field + ' LIKE \'%' + value + '%\'';
-                        }
-                        when 'does not contain' {
-                            // Correct SOQL syntax using NOT() with parentheses
-                            condition = '(NOT(' + field + ' LIKE \'%' + value + '%\'))';
-                        }
-                        when 'STARTS' {
-                            condition = field + ' LIKE \'' + value + '%\'';
-                        }
-                        when 'ENDS' {
-                            condition = field + ' LIKE \'%' + value + '\'';
-                        }
-                        when else {
-                            condition = field + ' ' + operator + ' \'' + value + '\'';
-                        }
-                    }
-                    filterConditions.add(condition);
-                }
-            }
-            
-            if (!filterConditions.isEmpty()) {
-                String combinedFilters = filterConditions[0];
-                for (Integer i = 1; i < filterConditions.size(); i++) {
-                    String currentOperator = filters[i].get('logicOperator');
-                    combinedFilters += ' ' + (currentOperator == null ? 'AND' : currentOperator) + ' ' + filterConditions[i];
-                }
-                whereClause += ' AND (' + combinedFilters + ')';
-            }
-        }
-
-        return whereClause;
-    }
-
-    private static Integer getTotalRecords(String childObject, String whereClause) {
-        return Database.countQuery(
-            'SELECT COUNT() FROM ' + String.escapeSingleQuotes(childObject) + 
-            ' WHERE ' + whereClause
-        );
-    }
-
-    private static List<SObject> executeMainQuery(
-        String childObject,
-        Set<String> queryFields,
-        String whereClause,
-        Integer pageSize,
-        Integer pageNumber
-    ) {
-        Integer offset = (pageNumber - 1) * pageSize;
-        
-        String query = 'SELECT ' + String.join(new List<String>(queryFields), ',') + 
-                      ' FROM ' + String.escapeSingleQuotes(childObject) + 
-                      ' WHERE ' + whereClause + 
-                      ' ORDER BY CreatedDate DESC' +
-                      ' LIMIT :pageSize OFFSET :offset';
-
-        return Database.query(query);
-    }
-
-    private static void handleException(Exception e) {
-        String errorMessage = 'Error: ' + e.getMessage();
-        System.debug(LoggingLevel.ERROR, 'Error: ' + e.getMessage());
-        System.debug(LoggingLevel.ERROR, 'Stack trace: ' + e.getStackTraceString());
-        throw new AuraHandledException(errorMessage);
     }
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>A button or row action of an Tekenable Advance Related List definition: a screen flow or a quick action, shown in the list header (runs for the parent record) or in each row's menu (runs for that row).</description>
+    <label>Tekenable Advance Related List Action</label>
+    <pluralLabel>Tekenable Advance Related List Actions</pluralLabel>
+    <visibility>Public</visibility>
+</CustomObject>

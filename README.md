@@ -6,13 +6,13 @@ A Salesforce Lightning component for record pages that shows a related list with
 
 ## Install
 
-Version **2.0.0-1** (beta, unlocked package, no namespace), for sandboxes, scratch orgs and Developer Edition orgs:
+Version **2.0.0-1** (released, unlocked package, no namespace):
 
+- **Production or Developer Edition:** https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
 - **Sandbox:** https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
-- **Developer Edition / other non-production login:** https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
 - **CLI:** `sf package install --package 04tdM000000fjIvQAI --target-org <alias> --wait 20`
 
-Production installs need a released version, which will be linked here once it is promoted.
+Install it in a sandbox first and test it there before installing in production.
 
 ## Documentation
 

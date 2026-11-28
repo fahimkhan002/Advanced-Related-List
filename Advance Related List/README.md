@@ -6,13 +6,13 @@ A Lightning Web Component that shows one related list on a record page. It adds 
 
 ## Install
 
-The package is an unlocked package with no namespace. Version **2.0.0-1** (beta) is ready for **sandboxes, scratch orgs and Developer Edition orgs**:
+The package is an unlocked package with no namespace. Version **2.0.0-1** is released and can be installed in production, sandboxes, scratch orgs and Developer Edition orgs:
 
+- Production or Developer Edition: https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
 - Sandbox: https://test.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
-- Developer Edition / other non-production login: https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000fjIvQAI
 - CLI: `sf package install --package 04tdM000000fjIvQAI --target-org <alias> --wait 20`
 
-A beta version can't be installed in production. A released (promoted) version will be added here for production installs.
+Install it in a sandbox first and test it there before installing in production.
 
 After installing, assign the permission sets (see [Permissions](#permissions)) and follow the **[User Guide](docs/user-guide/README.md)**, which shows every step with screenshots for end users and admins.
 
